@@ -33,8 +33,16 @@ describe('handoff contracts', () => {
       results: [{ criterion: 'AC-1', status: 'passed' }],
     });
     expect(legacy.ok).toBe(true);
-    // corrected_spec defaults to false when omitted
+    // corrected_spec and reconciled default to false when omitted
     expect((legacy.data as any).results[0].corrected_spec).toBe(false);
+    expect((legacy.data as any).results[0].reconciled).toBe(false);
+
+    // reconciled acknowledgment is accepted (G2)
+    const reconciled = checkHandoffObject('build-report', {
+      feature: 'auth',
+      results: [{ criterion: 'AC-1', status: 'passed', corrected_spec: true, reconciled: true }],
+    });
+    expect(reconciled.ok).toBe(true);
   });
 
   it('accepts a valid design handoff with a manifest', () => {

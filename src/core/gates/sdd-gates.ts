@@ -103,7 +103,13 @@ interface DefineCriteria {
   criteria?: string[];
 }
 interface BuildResults {
-  results?: Array<{ criterion: string; status: string; corrected_spec?: boolean; correction?: string }>;
+  results?: Array<{
+    criterion: string;
+    status: string;
+    corrected_spec?: boolean;
+    correction?: string;
+    reconciled?: boolean;
+  }>;
 }
 
 /** G_BUILD — before /ship. Replaces the prose checkbox + max-3-retry. */

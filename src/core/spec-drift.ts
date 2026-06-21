@@ -17,23 +17,30 @@ export interface BuildResult {
   status: string;
   corrected_spec?: boolean;
   correction?: string;
+  reconciled?: boolean;
 }
 
 export interface SpecDriftReport {
   drifted: Array<{ criterion: string; correction: string }>;
+  reconciled: string[]; // criteria that were corrected AND already reconciled into DEFINE
   clean: boolean;
 }
 
 /**
- * Collect every criterion the build flagged as a corrected-spec divergence.
- * `clean` is true iff none drifted — i.e. the spec and the implementation agree.
+ * Collect every criterion the build flagged as a corrected-spec divergence that
+ * has NOT yet been reconciled into DEFINE. A correction with `reconciled: true`
+ * is acknowledged — DEFINE has been updated — so it no longer counts as drift and
+ * the ship loop converges (dogfood run #2, G2). `clean` is true iff nothing is
+ * left unreconciled.
  */
 export function specDrift(results: ReadonlyArray<BuildResult>): SpecDriftReport {
-  const drifted = results
-    .filter((r) => r.corrected_spec === true)
+  const corrected = results.filter((r) => r.corrected_spec === true);
+  const drifted = corrected
+    .filter((r) => r.reconciled !== true)
     .map((r) => ({
       criterion: r.criterion,
       correction: r.correction ?? '(no correction note provided)',
     }));
-  return { drifted, clean: drifted.length === 0 };
+  const reconciled = corrected.filter((r) => r.reconciled === true).map((r) => r.criterion);
+  return { drifted, reconciled, clean: drifted.length === 0 };
 }

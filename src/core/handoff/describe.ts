@@ -93,9 +93,25 @@ function describeCore(core: z.ZodTypeAny): Pick<FieldDesc, 'type' | 'constraints
     case 'ZodEnum':
       return { type: 'enum', enumValues: (core as unknown as { _def: { values: string[] } })._def.values };
     case 'ZodArray': {
-      const el = unwrap((core as unknown as { _def: { type: z.ZodTypeAny } })._def.type);
+      const adef = (core as unknown as {
+        _def: { type: z.ZodTypeAny; minLength?: { value: number }; maxLength?: { value: number } };
+      })._def;
+      const el = unwrap(adef.type);
       const elDesc = describeCore(el.core);
-      return { type: `array<${elDesc.type}>`, ...(elDesc.fields ? { fields: elDesc.fields } : {}) };
+      // Surface the ELEMENT's constraints — the per-item rule (e.g. criteria items
+      // must match /^AC-\d+$/) is exactly what an agent needs and what was being
+      // dropped (dogfood run #2, G1). Prefix with "items" so array-level vs
+      // item-level rules don't conflate.
+      const constraints: string[] = [];
+      if (adef.minLength) constraints.push(`min ${adef.minLength.value} item(s)`);
+      if (adef.maxLength) constraints.push(`max ${adef.maxLength.value} item(s)`);
+      for (const c of elDesc.constraints ?? []) constraints.push(`items ${c}`);
+      if (elDesc.enumValues) constraints.push(`items in ${JSON.stringify(elDesc.enumValues)}`);
+      return {
+        type: `array<${elDesc.type}>`,
+        ...(constraints.length ? { constraints } : {}),
+        ...(elDesc.fields ? { fields: elDesc.fields } : {}),
+      };
     }
     case 'ZodObject':
       return { type: 'object', fields: describeObject(core) };

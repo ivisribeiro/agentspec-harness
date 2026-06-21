@@ -26,8 +26,9 @@ describe('describeHandoff (Zod introspection)', () => {
     expect(byName.clarity.type).toBe('number');
     expect(byName.clarity.constraints).toEqual(expect.arrayContaining(['min 0', 'max 1']));
 
-    // criteria: array<string> with the AC regex constraint
+    // criteria: array<string> — and the per-item regex constraint must be surfaced (G1)
     expect(byName.criteria.type).toBe('array<string>');
+    expect((byName.criteria.constraints ?? []).join(' ')).toContain('AC-');
 
     // open_questions has a default -> not required
     expect(byName.open_questions.required).toBe(false);

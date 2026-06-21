@@ -94,3 +94,58 @@ corrected a wrong spec. A non-executable false claim would have shipped uncaught
 - ⬜ **I-E (F3/F5):** per-gate `--help` + document the dual handoff path. *Partly covered by `spin explain`; rest deferred.*
 
 **Result:** 213 tests green (24 new), `spin` guard clean, plugin bundle rebuilt. The three high-leverage gaps the dogfood surfaced are closed and verified live against the `spin` CLI.
+
+---
+
+# Run #2 — post-fix re-run (fresh project pix-brcode-2)
+
+Same self-driven SDD cycle, now on the I-A/I-B/I-C harness. Run `wf_2c6fce06-f89`
+(4 agents, ~348k tokens). The point: does the fix hold, and does new friction appear?
+
+## ✅ The fixes demonstrably worked
+- **F1/F2 closed — zero source-diving.** Every one of the 4 phases reported
+  `read_source=false` and drove the cycle via the NEW introspection: `spin status`,
+  `spin explain <gate>`, `spin schema show <handoff-id>`. In Run #1 the agents read
+  `sdd-gates.ts` / `schemas.ts` **every phase**; in Run #2, **never**.
+- **I-C worked end-to-end on a real, NEW drift.** The build found a *different*
+  hallucinated value — DEFINE AC-4 stated the tag-26 outer length as `33`, the
+  correct EMV length is `29` (18+11). This time the build **flagged it**
+  (`corrected_spec=true` + note) instead of burying it in a comment; `G_SHIP`
+  surfaced the ⚠; the ship agent **reconciled DEFINE.md** (33→29). The Run #1
+  silent-drift failure **did not recur** — it was loud and reconciled. Independently
+  verified: 58 tests pass, generated copia-e-cola CRC `60F8==60F8` (valid).
+
+## ⚠ Two NEW gaps — in the fixes themselves (the loop continues)
+- **G1 — `schema show` drops array-element constraints (residual F2).** The define
+  agent's only retry: `spin schema show define` printed `criteria: array<string>`
+  but **lost the `^AC-\d+$` per-item regex** (my describer keeps the element's
+  *type* but discards its *constraints*). The agent put prose ACs in `criteria`, hit
+  an opaque `criteria.N: Invalid`, and recovered by **probing `spin handoff-check`**
+  (not reading source — good) — but the one constraint that would have prevented the
+  retry is exactly the one `schema show` failed to surface.
+- **G2 — `spec-drift` can't converge after reconciliation (I-C design hole).** After
+  the ship agent corrected DEFINE.md, `spin spec-drift --build` **still exits 1** with
+  AC-4 drifted — because it reads the build-report's `corrected_spec` flag, which
+  updating DEFINE.md doesn't clear. There is no "reconciled" acknowledgment, so the
+  loop never closes (the agent noticed: "DEFINE.md clearly contains 29, yet spec-drift
+  reports exit 1"). Same shape as `reconcile.ts`'s `resolved_at_commit` — I-C needs the
+  equivalent. Confirmed live: `spec-drift` still `clean:false drifted:[AC-4]` post-fix.
+
+## Follow-up candidates
+- ✅ **G1 — SHIPPED:** `spin schema show` now prints array-element constraints —
+  `criteria` shows `['min 1 item(s)', 'items matches /^AC-\d+$/']` — and the
+  DefineHandoff refinement carries a custom message ("expected a bare
+  acceptance-criterion id like AC-1, no prose/colon/spaces"). The exact retry from
+  run #2 is closed: verified live.
+- ✅ **G2 — SHIPPED:** `BuildReportHandoff.results[]` gains `reconciled`; `specDrift`
+  ignores a reconciled correction, so after DEFINE.md is fixed and the result is
+  marked `reconciled: true`, `spin spec-drift` exits 0 — the loop converges. The
+  ship command-doc spells out the 3-step reconciliation. Verified live on
+  pix-brcode-2 (AC-4 went from `drifted` to `reconciled`, exit 1 → exit 0).
+- ⬜ minor: `spin explain G_HANDOFF` exits 2 — the handoff check fires inside
+  `spin complete`, not as a registered gate; the id shown in errors isn't explainable. *Deferred.*
+
+**Run #2 result:** 217 tests green (+4), guard clean, plugin rebuilt. Both gaps the
+post-fix run surfaced — in the fixes themselves — are closed and verified live. The
+dogfood loop did its job twice: it proved the harness holds, then caught the holes in
+its own repair.

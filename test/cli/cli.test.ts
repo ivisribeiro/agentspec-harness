@@ -167,4 +167,28 @@ describe('spin CLI exit-code ABI', () => {
     expect(r.json.clean).toBe(false);
     expect(r.json.drifted[0].criterion).toBe('AC-1');
   });
+
+  it('spec-drift converges (exit 0) once the correction is reconciled (I-C / G2)', async () => {
+    const file = `${root}/build.json`;
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        feature: 'f',
+        results: [
+          { criterion: 'AC-1', status: 'passed', corrected_spec: true, correction: 'fixed', reconciled: true },
+        ],
+      })
+    );
+    const r = await cli(['--root', root, 'spec-drift', '--build', file]);
+    expect(r.code).toBe(0);
+    expect(r.json.clean).toBe(true);
+    expect(r.json.reconciled).toEqual(['AC-1']);
+  });
+
+  it('schema show surfaces the array-item regex constraint (I-B / G1)', async () => {
+    const r = await cli(['--root', root, 'schema', 'show', 'define']);
+    expect(r.code).toBe(0);
+    const criteria = r.json.fields.find((f: any) => f.name === 'criteria');
+    expect((criteria.constraints ?? []).join(' ')).toContain('AC-');
+  });
 });

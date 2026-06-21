@@ -7,7 +7,16 @@ import { z } from 'zod';
 export const DefineHandoff = z.object({
   feature: z.string().min(1),
   clarity: z.number().min(0).max(1),
-  criteria: z.array(z.string().regex(/^AC-\d+$/)).min(1, 'at least one acceptance criterion'),
+  criteria: z
+    .array(
+      z
+        .string()
+        // Custom message so a wrong shape reads as guidance, not a bare "Invalid"
+        // (dogfood run #2, G1): the prose AC belongs in DEFINE.md; this array holds
+        // bare IDs only.
+        .regex(/^AC-\d+$/, 'expected a bare acceptance-criterion id like "AC-1" (no prose, colon, or spaces)')
+    )
+    .min(1, 'at least one acceptance criterion'),
   open_questions: z.array(z.string()).default([]),
 });
 
@@ -47,6 +56,10 @@ export const BuildReportHandoff = z.object({
         // green build can't silently leave a false spec behind.
         corrected_spec: z.boolean().default(false),
         correction: z.string().optional(), // what was wrong + the right value
+        // Set true once DEFINE.md has been updated to the correct value (dogfood
+        // run #2, G2). `spin spec-drift` ignores a reconciled correction, so the
+        // ship loop converges instead of exiting 1 forever after the fix.
+        reconciled: z.boolean().default(false),
       })
     )
     .default([]),

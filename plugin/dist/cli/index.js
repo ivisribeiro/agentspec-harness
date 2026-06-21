@@ -20631,7 +20631,9 @@ import * as fs5 from "node:fs";
 var DefineHandoff = external_exports.object({
   feature: external_exports.string().min(1),
   clarity: external_exports.number().min(0).max(1),
-  criteria: external_exports.array(external_exports.string().regex(/^AC-\d+$/)).min(1, "at least one acceptance criterion"),
+  criteria: external_exports.array(
+    external_exports.string().regex(/^AC-\d+$/, 'expected a bare acceptance-criterion id like "AC-1" (no prose, colon, or spaces)')
+  ).min(1, "at least one acceptance criterion"),
   open_questions: external_exports.array(external_exports.string()).default([])
 });
 var DesignHandoff = external_exports.object({
@@ -20664,8 +20666,12 @@ var BuildReportHandoff = external_exports.object({
       // correction to be EXPLICIT instead of buried in a code comment — so a
       // green build can't silently leave a false spec behind.
       corrected_spec: external_exports.boolean().default(false),
-      correction: external_exports.string().optional()
+      correction: external_exports.string().optional(),
       // what was wrong + the right value
+      // Set true once DEFINE.md has been updated to the correct value (dogfood
+      // run #2, G2). `spin spec-drift` ignores a reconciled correction, so the
+      // ship loop converges instead of exiting 1 forever after the fix.
+      reconciled: external_exports.boolean().default(false)
     })
   ).default([]),
   files_written: external_exports.array(external_exports.string()).default([]),
@@ -20829,11 +20835,13 @@ function checkHandoffFile(schemaId, filePath) {
 
 // src/core/spec-drift.ts
 function specDrift(results) {
-  const drifted = results.filter((r) => r.corrected_spec === true).map((r) => ({
+  const corrected = results.filter((r) => r.corrected_spec === true);
+  const drifted = corrected.filter((r) => r.reconciled !== true).map((r) => ({
     criterion: r.criterion,
     correction: r.correction ?? "(no correction note provided)"
   }));
-  return { drifted, clean: drifted.length === 0 };
+  const reconciled = corrected.filter((r) => r.reconciled === true).map((r) => r.criterion);
+  return { drifted, reconciled, clean: drifted.length === 0 };
 }
 
 // src/core/gates/sdd-gates.ts
@@ -21886,9 +21894,19 @@ function describeCore(core) {
     case "ZodEnum":
       return { type: "enum", enumValues: core._def.values };
     case "ZodArray": {
-      const el = unwrap(core._def.type);
+      const adef = core._def;
+      const el = unwrap(adef.type);
       const elDesc = describeCore(el.core);
-      return { type: `array<${elDesc.type}>`, ...elDesc.fields ? { fields: elDesc.fields } : {} };
+      const constraints = [];
+      if (adef.minLength) constraints.push(`min ${adef.minLength.value} item(s)`);
+      if (adef.maxLength) constraints.push(`max ${adef.maxLength.value} item(s)`);
+      for (const c of elDesc.constraints ?? []) constraints.push(`items ${c}`);
+      if (elDesc.enumValues) constraints.push(`items in ${JSON.stringify(elDesc.enumValues)}`);
+      return {
+        type: `array<${elDesc.type}>`,
+        ...constraints.length ? { constraints } : {},
+        ...elDesc.fields ? { fields: elDesc.fields } : {}
+      };
     }
     case "ZodObject":
       return { type: "object", fields: describeObject(core) };

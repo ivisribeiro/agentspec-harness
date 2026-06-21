@@ -51,9 +51,17 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js spec-drift --build .spindle/feature
 ```
 
 Exit 0 → no drift; continue. Exit 1 → the build CORRECTED one or more criteria
-(`drifted[]` lists each with its `correction`). Before archiving, **update the
-DEFINE.md criterion to the correct value** so the shipped spec is true, then
-re-run. A feature must not ship with a spec its own build contradicts.
+(`drifted[]` lists each with its `correction`). To reconcile:
+
+1. **Update the DEFINE.md criterion** to the correct value so the shipped spec is true.
+2. **Mark it reconciled** — set `"reconciled": true` on that criterion's result in
+   `.spindle/features/<feature>/.handoffs/build.json` (this is the acknowledgment;
+   updating DEFINE.md alone does NOT clear the flag — the drift signal lives in the
+   build report).
+3. **Re-run** `spin spec-drift --build …` — it now exits 0 (the reconciled correction
+   is acknowledged) and the loop converges.
+
+A feature must not ship with an unreconciled spec its own build contradicts.
 
 ### 4. Route the ship worker
 
