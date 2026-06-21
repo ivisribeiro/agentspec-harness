@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spindle — How to Use + Provenance</title>
+<style>
+  :root {
+    --ink: #14110d;
+    --ink-2: #423a30;
+    --ink-3: #6b6052;
+    --paper: #f6f1e7;
+    --paper-2: #efe7d7;
+    --paper-3: #e7dcc7;
+    --rule: #d8cbb2;
+    --rule-soft: #e4d9c3;
+    --card: #fbf7ee;
+
+    --spin: #6b4f2a;     /* original — burnt walnut */
+    --spin-bg: #efe2c9;
+    --openspec: #2f6d56; /* ported — pine */
+    --openspec-bg: #dcebe2;
+    --agentspec: #9a4322;/* forked — terracotta */
+    --agentspec-bg: #f3ddcf;
+    --ecc: #4a4f86;      /* borrowed — slate violet */
+    --ecc-bg: #e0e1f0;
+
+    --mono: "SFMono-Regular", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace;
+    --serif: "Iowan Old Style", "Palatino Linotype", "Hoefler Text", Georgia, serif;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+
+    --maxw: 1080px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(circle at 18% -5%, #fbf6ea 0%, var(--paper) 42%, var(--paper) 100%);
+    color: var(--ink-2);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: #d8c79c; color: var(--ink); }
+
+  a { color: var(--spin); text-decoration: none; border-bottom: 1px solid rgba(107,79,42,0.35); }
+  a:hover { border-bottom-color: var(--spin); }
+
+  code, kbd, .mono { font-family: var(--mono); }
+
+  /* ---------- layout shell ---------- */
+  .layout {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    max-width: var(--maxw);
+    margin: 0 auto;
+    gap: 0;
+  }
+
+  nav.toc {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 40px 24px 40px 28px;
+    border-right: 1px solid var(--rule);
+  }
+  nav.toc .wordmark {
+    font-family: var(--serif);
+    font-size: 26px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+    line-height: 1.05;
+    margin: 0 0 2px;
+  }
+  nav.toc .wordmark b { font-weight: 600; }
+  nav.toc .tagline {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--ink-3);
+    margin: 0 0 26px;
+  }
+  nav.toc .toc-group {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--spin);
+    margin: 22px 0 8px;
+    font-weight: 600;
+  }
+  nav.toc a {
+    display: block;
+    font-size: 13.5px;
+    color: var(--ink-2);
+    padding: 3px 0;
+    border: none;
+    line-height: 1.35;
+  }
+  nav.toc a:hover { color: var(--spin); }
+  nav.toc .part-mark {
+    display: inline-block;
+    width: 1.4em;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  main { padding: 40px 48px 120px; min-width: 0; }
+
+  /* ---------- hero ---------- */
+  header.hero { margin: 8px 0 12px; }
+  .eyebrow {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--agentspec);
+    font-weight: 600;
+    margin: 0 0 14px;
+  }
+  h1.title {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(34px, 5vw, 52px);
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin: 0 0 18px;
+  }
+  .lede {
+    font-size: 18px;
+    max-width: 60ch;
+    color: var(--ink-2);
+    margin: 0 0 22px;
+  }
+  .lede b { color: var(--ink); font-weight: 600; }
+
+  .seam {
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--spin);
+    background: var(--card);
+    border-radius: 0 6px 6px 0;
+    padding: 18px 22px;
+    margin: 26px 0 8px;
+    max-width: 70ch;
+  }
+  .seam .seam-k {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--spin); font-weight: 600; margin: 0 0 6px;
+  }
+  .seam p { margin: 0; font-size: 15.5px; }
+  .seam code { background: var(--paper-3); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+
+  /* ---------- section headings ---------- */
+  .part-banner {
+    margin: 76px 0 8px;
+    padding-top: 26px;
+    border-top: 2px solid var(--ink);
+  }
+  .part-banner .pl {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.2em;
+    color: var(--ink-3); font-weight: 600;
+  }
+  .part-banner h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(26px, 3.4vw, 36px);
+    color: var(--ink);
+    margin: 6px 0 0;
+    letter-spacing: -0.015em;
+  }
+  .part-banner p.sub { margin: 10px 0 0; font-size: 15.5px; max-width: 66ch; }
+
+  h3.sec {
+    font-size: 21px;
+    font-family: var(--serif);
+    font-weight: 600;
+    color: var(--ink);
+    margin: 52px 0 6px;
+    letter-spacing: -0.01em;
+  }
+  h3.sec .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--agentspec);
+    margin-right: 10px;
+    vertical-align: 2px;
+  }
+  h4.subsec {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+    font-weight: 600;
+    margin: 34px 0 12px;
+  }
+  p { margin: 0 0 16px; }
+  p.tight { margin-bottom: 8px; }
+
+  /* ---------- agent cards ---------- */
+  .agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 16px;
+    margin: 20px 0 8px;
+  }
+  .acard {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 18px 18px 16px;
+    display: flex;
+    flex-direction: column;
+  }
+  .acard.span2 { grid-column: 1 / -1; }
+  .acard .ahead {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; margin-bottom: 8px;
+  }
+  .acard .aname {
+    font-family: var(--mono);
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .cat {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .cat.workflow  { background:#e9e0cd; color:#6b4f2a; }
+  .cat.review    { background:#f3ddcf; color:#8a3c1f; }
+  .cat.adversary { background:#efd9d7; color:#8f2f2f; }
+  .cat.architect { background:#e0e1f0; color:#42477b; }
+  .cat.kb        { background:#dcebe2; color:#2a614c; }
+  .cat.migrate   { background:#f0e2cf; color:#7a5410; }
+  .cat.factcheck { background:#e6eef6; color:#2a5c86; }
+  .cat.audit     { background:#e7e2d6; color:#5f5648; }
+
+  .acard .role { font-size: 13.5px; color: var(--ink-2); margin: 0 0 12px; line-height: 1.5; }
+  .acard .rows { margin-top: auto; border-top: 1px dashed var(--rule); padding-top: 10px; }
+  .arow { display: grid; grid-template-columns: 58px 1fr; gap: 8px; font-size: 12.5px; padding: 4px 0; align-items: start; }
+  .arow .k { color: var(--ink-3); text-transform: uppercase; font-size: 10px; letter-spacing: 0.09em; font-weight: 600; padding-top: 2px; }
+  .arow .v { color: var(--ink-2); line-height: 1.5; }
+  .arow .v code, .chip {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    background: var(--paper-2);
+    border: 1px solid var(--rule-soft);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--ink);
+    white-space: nowrap;
+    display: inline-block;
+    margin: 1px 2px 1px 0;
+  }
+  .chip.gate { background: #ece1cb; border-color:#d8c79c; color:#6b4f2a; }
+  .chip.tool { background: #e2ecf4; border-color:#cfe0ee; color:#2a5c86; }
+  .chip.model-opus   { background:#e7e1f0; border-color:#d4cbe6; color:#42477b; }
+  .chip.model-sonnet { background:#e3ede1; border-color:#cfdfca; color:#3b6d34; }
+  .chip.model-haiku  { background:#f0e6d3; border-color:#e0cfa8; color:#7a5410; }
+
+  /* ---------- command table ---------- */
+  .tbl-wrap { overflow-x: auto; margin: 16px 0 8px; border: 1px solid var(--rule); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; background: var(--card); }
+  thead th {
+    text-align: left;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+    font-weight: 600;
+    padding: 12px 14px;
+    border-bottom: 1.5px solid var(--rule);
+    background: var(--paper-2);
+    position: sticky; top: 0;
+  }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; line-height: 1.5; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--paper-2); }
+  td .cmd { font-family: var(--mono); font-weight: 600; color: var(--spin); white-space: nowrap; }
+  td code { font-family: var(--mono); font-size: 12px; background: var(--paper-2); padding: 1px 4px; border-radius: 3px; }
+
+  /* ---------- flow steps ---------- */
+  .flow {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 20px 22px;
+    margin: 14px 0 22px;
+  }
+  .flow .flow-title {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em;
+    font-weight: 600; color: var(--ink); margin: 0 0 16px;
+  }
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  .steps > li {
+    position: relative;
+    padding: 0 0 18px 38px;
+    border-left: 2px solid var(--rule);
+    margin-left: 13px;
+  }
+  .steps > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .steps > li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: -14px; top: -2px;
+    width: 26px; height: 26px;
+    background: var(--spin);
+    color: #fff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+    font-family: var(--mono);
+  }
+  .steps .st { font-weight: 600; color: var(--ink); font-size: 14.5px; }
+  .steps .sd { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+  .steps code, .inline-code {
+    font-family: var(--mono); font-size: 11.5px;
+    background: var(--paper-2); border: 1px solid var(--rule-soft);
+    padding: 1px 5px; border-radius: 4px; color: var(--ink);
+  }
+  .gatepill {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    background:#ece1cb; border:1px solid #d8c79c; color:#6b4f2a;
+    padding:1px 6px; border-radius:4px; margin-left:4px;
+  }
+
+  /* ---------- ABI / exit codes ---------- */
+  .abi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 16px 0; }
+  .abi {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .abi .code {
+    font-family: var(--mono); font-size: 30px; font-weight: 600;
+    line-height: 1; color: var(--ink);
+  }
+  .abi .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; margin: 8px 0 3px; }
+  .abi.pass  { border-top: 3px solid var(--openspec); }
+  .abi.pass .lbl { color: var(--openspec); }
+  .abi.block { border-top: 3px solid var(--agentspec); }
+  .abi.block .lbl { color: var(--agentspec); }
+  .abi.usage { border-top: 3px solid var(--ink-3); }
+  .abi.usage .lbl { color: var(--ink-3); }
+  .abi.intern{ border-top: 3px solid var(--ecc); }
+  .abi.intern .lbl { color: var(--ecc); }
+  .abi .desc { font-size: 12.5px; color: var(--ink-2); }
+
+  .surface-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .surface-cols .panel {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 16px 18px;
+  }
+  .panel h5 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); font-weight: 600; }
+  .panel ul { margin: 0; padding-left: 0; list-style: none; }
+  .panel li { font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--rule-soft); }
+  .panel li:last-child { border-bottom: none; }
+  .panel li code { font-family: var(--mono); font-size: 11.5px; color: var(--spin); font-weight: 600; }
+  .panel li span { color: var(--ink-3); }
+
+  /* ---------- comparison table (part B) ---------- */
+  .cmp thead th.col-spin     { color: var(--spin); }
+  .cmp thead th.col-openspec { color: var(--openspec); }
+  .cmp thead th.col-agentspec{ color: var(--agentspec); }
+  .cmp thead th.col-ecc      { color: var(--ecc); }
+  .cmp td:first-child { font-weight: 600; color: var(--ink); width: 18%; }
+  .cmp td { font-size: 12.5px; }
+  .yes { color: var(--openspec); font-weight: 600; }
+  .no  { color: var(--ink-3); }
+  .partial { color: var(--agentspec); font-weight: 600; }
+  .legend-row { display:flex; flex-wrap:wrap; gap:18px; margin: 10px 0 0; font-size:12px; color:var(--ink-3); }
+  .legend-row span b { font-weight:600; }
+
+  /* ---------- provenance (part C) ---------- */
+  .prov-bar {
+    display: flex; height: 46px; border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--rule); margin: 14px 0 6px; font-family: var(--mono);
+  }
+  .prov-bar div {
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .pb-agentspec { background: var(--agentspec); flex: 65; }
+  .pb-spin      { background: var(--spin); flex: 27; }
+  .pb-openspec  { background: var(--openspec); flex: 10; }
+  .prov-bar-cap { font-size: 12px; color: var(--ink-3); margin: 0 0 26px; }
+
+  .prov-card {
+    border: 1px solid var(--rule); border-radius: 8px; margin: 18px 0;
+    overflow: hidden; background: var(--card);
+  }
+  .prov-card .ph {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 18px; border-bottom: 1px solid var(--rule);
+  }
+  .prov-card .badge {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700;
+    padding: 4px 10px; border-radius: 5px; color: #fff;
+  }
+  .b-original { background: var(--spin); }
+  .b-ported   { background: var(--openspec); }
+  .b-forked   { background: var(--agentspec); }
+  .b-borrowed { background: var(--ecc); }
+  .prov-card .ph .src { font-size: 13px; color: var(--ink-3); }
+  .prov-card .ph .src b { color: var(--ink); font-weight: 600; }
+  .prov-card .pbody { padding: 6px 18px 14px; }
+  .prov-card ul.plist { margin: 8px 0 0; padding-left: 20px; }
+  .prov-card ul.plist li { font-size: 13.5px; margin: 7px 0; color: var(--ink-2); }
+  .prov-card ul.plist li b { color: var(--ink); font-weight: 600; }
+  .prov-card code { font-family: var(--mono); font-size: 12px; background: var(--paper-2); padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+
+  .corrected {
+    margin: 10px 0 0; padding: 11px 14px;
+    background: #f6ece0; border: 1px solid #e6d3bd; border-left: 4px solid var(--agentspec);
+    border-radius: 0 5px 5px 0; font-size: 12.5px; color: var(--ink-2);
+  }
+  .corrected .ck { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--agentspec); display:block; margin-bottom: 4px; }
+
+  .verbatim {
+    display:inline-block; font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+    background:#efd9d7; border:1px solid #e0bdbb; color:#8f2f2f;
+    padding:1px 6px; border-radius:4px; margin-left:6px;
+  }
+
+  .honest {
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 26px 28px;
+    margin: 34px 0 0;
+  }
+  .honest h3 { font-family: var(--serif); font-weight: 600; font-size: 22px; color: var(--ink); margin: 0 0 12px; }
+  .honest p { font-size: 15px; margin: 0 0 14px; }
+  .honest p:last-child { margin-bottom: 0; }
+  .honest .one-liner {
+    font-family: var(--serif); font-style: italic; font-size: 17px; color: var(--ink);
+    border-left: 3px solid var(--spin); padding-left: 16px; margin: 18px 0 0;
+  }
+
+  .footnote {
+    margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--rule);
+    font-size: 12px; color: var(--ink-3);
+  }
+  .footnote code { font-family: var(--mono); }
+
+  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
+
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--rule); }
+    main { padding: 28px 22px 80px; }
+    .surface-cols { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <nav class="toc" aria-label="Table of contents">
+    <p class="wordmark"><b>Spindle</b></p>
+    <p class="tagline">harness doc &amp; provenance</p>
+
+    <p class="toc-group">Part A · How to use</p>
+    <a href="#what"><span class="part-mark">·</span>What Spindle is</a>
+    <a href="#agents"><span class="part-mark">A1</span>The agents</a>
+    <a href="#commands"><span class="part-mark">A2</span>Commands reference</a>
+    <a href="#flows"><span class="part-mark">A3</span>Canonical flows</a>
+    <a href="#abi"><span class="part-mark">A4</span>Surface &amp; exit-code ABI</a>
+
+    <p class="toc-group">Part B · Compared</p>
+    <a href="#compare"><span class="part-mark">B1</span>Capability matrix</a>
+
+    <p class="toc-group">Part C · Provenance</p>
+    <a href="#share"><span class="part-mark">C1</span>The honest share</a>
+    <a href="#original"><span class="part-mark">C2</span>Original to Spindle</a>
+    <a href="#ported"><span class="part-mark">C3</span>Ported · OpenSpec</a>
+    <a href="#forked"><span class="part-mark">C4</span>Forked · AgentSpec</a>
+    <a href="#borrowed"><span class="part-mark">C5</span>Borrowed · ECC</a>
+    <a href="#verdict"><span class="part-mark">·</span>Honest read</a>
+  </nav>
+
+  <main>
+    <span class="sr-only">A product document for Spindle, a harness that makes an LLM spec-driven-development workflow testable. It covers how to use the agents, commands, and flows; a capability comparison against AgentSpec, ECC, and OpenSpec; and an honest, adversarially-reviewed provenance breakdown of what was forked, ported, borrowed, and originally built.</span>
+
+    <header class="hero">
+      <p class="eyebrow">Harness-native spec-driven dataops</p>
+      <h1 class="title">Spindle</h1>
+      <p class="lede">Spindle is a Claude Code plugin that turns a spec-driven-development workflow into something <b>actually testable</b>. A deterministic CLI named <code class="mono">spin</code> owns every "done" decision and returns it as a process exit code. The slash commands are the only layer that ever runs a model.</p>
+
+      <div class="seam">
+        <p class="seam-k">The hard seam</p>
+        <p>The model proposes; <code>spin</code> disposes. <code>spin</code> is a TypeScript CLI that <b>never calls a model</b> — a CI grep-guard fails the build if any network egress appears in <code>src/</code>. Completion is recorded only by <code>spin&nbsp;complete&nbsp;--handoff</code> (which validates the worker's JSON against a Zod schema, <em>then</em> marks done). Phases clear only through <code>spin&nbsp;gate&nbsp;&lt;id&gt;</code>, a pure function reading the filesystem and run-state — never the conversation. An LLM cannot self-mark itself complete.</p>
+      </div>
+    </header>
+
+    <!-- ============================================================ PART A -->
+    <section class="part-banner" id="partA">
+      <span class="pl">Part A</span>
+      <h2>How to use Spindle</h2>
+      <p class="sub">Agents are dispatched by slash commands. Workers author artifacts and write a JSON handoff sidecar; commands drive the <code class="mono">spin</code> spine — routing the model, validating the handoff, running gates, and branching on the exit code. Workers never call <code class="mono">spin&nbsp;complete</code> / <code class="mono">spin&nbsp;gate</code> themselves.</p>
+    </section>
+
+    <h3 class="sec" id="what"><span class="num">·</span>What runs, and who decides</h3>
+    <p>Two roles, kept strictly apart. <b>Slash commands</b> (in your Claude session) are the only place a model executes — they dispatch agents via the Task tool on a routed model tier. <b>The <code class="mono">spin</code> CLI</b> is deterministic shell plumbing: it orders artifacts, validates handoffs, runs gates, and exits with a code the command branches on. A gate is the sole arbiter of a phase — never a worker's self-reported checkbox.</p>
+
+    <h3 class="sec" id="agents"><span class="num">A1</span>The agents</h3>
+    <p class="tight">Thirteen authored harness workers wrap the specialist doctrine in the deterministic spine. Each card shows what the agent <em>does</em>, what it <em>calls</em>, its <em>tools</em>, and the expected <em>flow</em>. The <b>forked specialist roster</b> (52 KB-grounded data-engineering agents) is grouped as a single entry at the end — it is inherited verbatim and sits outside the gate spine.</p>
+
+    <div class="agent-grid">
+
+      <div class="acard">
+        <div class="ahead"><span class="aname">define-worker</span><span class="cat workflow">workflow · P1</span></div>
+        <p class="role">Authors <code>DEFINE.md</code> (Why / What / Acceptance Criteria with stable <code>AC-n</code> ids) plus a strict <code>define.json</code> handoff sidecar.</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v">Reads brainstorm/context → writes the Why/What and ≥3 <code>AC-n</code> criteria + open questions.</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v">Orchestrated by <code>/define</code>: <span class="chip">spin next</span> <span class="chip model-opus">route define-intent · opus</span> <span class="chip">validate DEFINE.md</span> <span class="chip">complete define --handoff</span> <span class="chip gate">G_DEFINE</span></span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Read</span><span class="chip tool">Write</span><span class="chip tool">Bash</span></span></div>
+          <div class="arow"><span class="k">flow</span><span class="v">Worker never self-completes. <span class="chip gate">G_DEFINE</span> exit 1 → STOP back to <code>/define</code>; exit 0 → recommend <code>/design</code>.</span></div>
+        </div>
+      </div>
+
+      <div class="acard">
+        <div class="ahead"><span class="aname">design-worker</span><span class="cat workflow">workflow · P2</span></div>
+        <p class="role">Authors <code>DESIGN.md</code> — Overview, a File Manifest table, Decisions — plus a <code>design.json</code> sidecar mirroring the table row-for-row. Design only, no code.</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v">Reads approved DEFINE → emits manifest <code>| File | create/modify/delete | Purpose |</code>.</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v">Via <code>/design</code>: <span class="chip gate">G_DEFINE</span> (precond) <span class="chip">next</span> <span class="chip model-opus">route design-intent · opus</span> <span class="chip">complete design --handoff</span> <span class="chip gate">G_DESIGN</span></span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Read</span><span class="chip tool">Write</span><span class="chip tool">Grep</span><span class="chip tool">Glob</span></span></div>
+          <div class="arow"><span class="k">flow</span><span class="v">Invalid handoff → <code>spin retry design --inc</code> + re-dispatch with <code>{reasons,unmet}</code>. <span class="chip gate">G_DESIGN</span> exit 0 → <code>/build</code>.</span></div>
+        </div>
+      </div>
+
+      <div class="acard">
+        <div class="ahead"><span class="aname">build-worker</span><span class="cat workflow">workflow · P3</span></div>
+        <p class="role">Invoked once per manifest file/layer in <b>true parallel</b>. Writes the real source file, runs a minimal parse/syntax verify, emits a build-task sidecar. No full test suite.</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v">One <code>manifest_entry</code> → source on disk + <code>{file,verification_passed,criteria_satisfied[],issues[]}</code>; may flag <code>corrected_spec</code> if DEFINE was wrong.</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v">Does <b>not</b> call <code>spin</code>. <code>/build</code> drives: <span class="chip">next (parallel_group)</span> <span class="chip model-sonnet">route code-build · sonnet</span> <span class="chip">complete &lt;id&gt; --handoff</span> <span class="chip gate">G_BUILD</span> <span class="chip">diff-criteria</span> <span class="chip">spec-drift</span></span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Read</span><span class="chip tool">Write</span><span class="chip tool">Edit</span><span class="chip tool">Bash</span><span class="chip tool">Grep</span><span class="chip tool">Glob</span></span></div>
+          <div class="arow"><span class="k">flow</span><span class="v"><span class="chip gate">G_BUILD</span> verifies <em>in code</em> every manifest file exists, criteria-diff empty (no phantom AC, evidence files exist), report present. No self-checkbox — the gate is sole arbiter.</span></div>
+        </div>
+      </div>
+
+      <div class="acard">
+        <div class="ahead"><span class="aname">ship-worker</span><span class="cat workflow">workflow · P4</span></div>
+        <p class="role">Prose-only archivist. Writes <code>SHIPPED.md</code> + <code>LESSONS.md</code> from the BUILD_REPORT and DEFINE — only after <code>G_SHIP</code> has already certified every criterion passed.</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v">Summary / Criteria Met / Artifacts / Run Log + What Worked / Was Hard / Carry Forward.</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v">Via <code>/ship</code>: <span class="chip gate">G_BUILD</span> <span class="chip">diff-criteria</span> <span class="chip gate">G_SHIP</span> <span class="chip">spec-drift --build</span> <span class="chip model-haiku">route ship-prose · haiku</span> <span class="chip">complete ship</span></span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Read</span><span class="chip tool">Write</span><span class="chip tool">Glob</span></span></div>
+          <div class="arow"><span class="k">flow</span><span class="v"><span class="chip gate">G_SHIP</span> must be green (define.criteria − build.passed empty) and any <code>corrected_spec</code> drift reconciled before archive.</span></div>
+        </div>
+      </div>
+
+      <div class="acard">
+        <div class="ahead"><span class="aname">brainstorm worker</span><span class="cat workflow">workflow · P0</span></div>
+        <p class="role">Optional Phase 0 exploration. One-question-at-a-time collaborative dialogue → <code>BRAINSTORM.md</code> + a define-schema sidecar. No blocking gate.</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v">Problem Space / Goals / Non-Goals / Personas / Open Questions / Risks / Signal.</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v">Via <code>/brainstorm</code>: <span class="chip">next</span> <span class="chip model-opus">route define-intent · opus</span> <span class="chip">complete brainstorm --handoff</span></span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Task</span> (dialogue)</span></div>
+          <div class="arow"><span class="k">flow</span><span class="v">Gate: <b>none</b> (exploratory). Recommends <code>/define</code>; skipping straight to it is valid.</span></div>
+        </div>
+      </div>
+
+      <div class="acard">
+        <div class="ahead"><span class="aname">arch-worker + security-worker</span><span class="cat review">review pair</span></div>
+        <p class="role">Parallel review pair. <b>arch-worker</b> finds structural/design/logic + invariant violations; <b>security-worker</b> scans OWASP / secrets / injection / authz. Each emits a finding handoff.</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v"><code>{findings:[{severity,file,line,rule,message,source}]}</code> per role → <code>.spindle/review/.handoffs/</code>.</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v">Via <code>/review</code>: <span class="chip model-sonnet">route finding-analysis · sonnet</span> <span class="chip">handoff-check finding</span> <span class="chip model-opus">route review-judge · opus</span> <span class="chip gate">G_REVIEW_BLOCK</span></span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Read</span><span class="chip tool">Grep</span><span class="chip tool">Glob</span><span class="chip tool">Bash</span></span></div>
+          <div class="arow"><span class="k">flow</span><span class="v">Dedup by <code>(file,line)</code> keeping higher severity → adversary refutes each critical → survivors → <span class="chip gate">G_REVIEW_BLOCK</span> exit 1 if any critical survives.</span></div>
+        </div>
+      </div>
+
+      <div class="acard">
+        <div class="ahead"><span class="aname">challenger</span><span class="cat adversary">adversary</span></div>
+        <p class="role">Read-only Opus adversary shared by <code>/review</code>, <code>/migrate</code>, <code>/design</code> (strict). Tries to <b>refute</b> a claim with independent counter-evidence — never sees the generator's reasoning (anti-anchoring).</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v">Input: only the artifact under test + ground-truth paths. Output: one critical finding per blocking counter-example, or <code>{findings:[]}</code> = upheld.</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v"><span class="chip model-opus">route adversary · opus</span> <span class="chip model-opus">route review-judge</span> <span class="chip model-opus">route equivalence-break</span> — <b>never downgraded</b>.</span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Read</span><span class="chip tool">Grep</span><span class="chip tool">Glob</span><span class="chip tool">Bash</span></span></div>
+          <div class="arow"><span class="k">flow</span><span class="v">Feeds <span class="chip gate">G_REVIEW_BLOCK</span> which counts <code>severity==critical</code>. On safety-critical uncertainty it <em>must</em> emit a critical.</span></div>
+        </div>
+      </div>
+
+      <div class="acard">
+        <div class="ahead"><span class="aname">the-planner</span><span class="cat architect">architect · T2</span></div>
+        <p class="role">Strategic Opus architect: multi-phase implementation plans, technology validation, roadmaps, risk assessment for system-design tasks. KB-first; not a gate-spine worker.</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v">Phased plan + risks + roadmap (threshold 0.90, important tier).</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v">KB-first AgentSpec template agent — reads <code>kb/</code> + Agreement Matrix; invoked by the orchestrator, escalates when outside planning scope.</span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Read/Write/Edit</span><span class="chip tool">Grep/Glob</span><span class="chip tool">WebSearch</span><span class="chip tool">WebFetch</span><span class="chip tool">TodoWrite</span></span></div>
+          <div class="arow"><span class="k">flow</span><span class="v">Feeds SDD <code>/define</code>–<code>/design</code> or hands to a domain specialist. Outside the deterministic gate spine.</span></div>
+        </div>
+      </div>
+
+      <div class="acard">
+        <div class="ahead"><span class="aname">kb-concept-worker</span><span class="cat kb">kb</span></div>
+        <p class="role">Authors exactly one KB concept page (<code>concept-&lt;slug&gt;.md</code>) + a kb-concept sidecar. Enforces honesty rule <b>E-1</b>: never invent value maps; set <code>needs_decoding:true</code> when opaque.</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v">Summary / Definition / Key Properties / Relationships / Examples / Test Cases (≥2).</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v">Via <code>/create-kb</code>: <span class="chip">schema show</span> <span class="chip">next (parallel concepts)</span> <span class="chip model-sonnet">route kb-concept · sonnet</span> <span class="chip">complete --handoff</span> <span class="chip gate">G_KB_STRUCTURE</span> <span class="chip gate">G_KB_COVERAGE</span></span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Read</span><span class="chip tool">Write</span><span class="chip tool">Grep</span><span class="chip tool">Glob</span></span></div>
+          <div class="arow"><span class="k">flow</span><span class="v"><span class="chip gate">G_KB_COVERAGE</span> checks every manifest slug has a page + valid handoff, surfaces <code>needs_decoding</code> debt.</span></div>
+        </div>
+      </div>
+
+      <div class="acard span2">
+        <div class="ahead"><span class="aname">migrate-dbt-worker / migrate-spark-worker + equivalence-worker</span><span class="cat migrate">migrate · highest risk</span></div>
+        <p class="role">The highest-risk rewrite lane, built on <b>separation of duties</b> — no agent both decides and validates. Two competing plan authors (dbt vs spark) write independent migration plans; a separate equivalence-worker (no shared context, cannot amend the plan) verifies row/schema/semantic equivalence and emits <code>finding[]</code>.</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v"><code>plan-dbt.json</code> + <code>plan-spark.json</code> <code>{engine,steps[],risks[],rollback}</code> → <code>equiv-findings.json</code> + <code>adversary-findings.json</code>. Engine picked <b>from the data</b>, not author preference.</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v">One-shot — <b>no</b> init/next/complete/retry, only: <span class="chip model-sonnet">route migration-plan · sonnet</span> <span class="chip">handoff-check migration-plan</span> <span class="chip model-sonnet">route claim-verify</span> <span class="chip model-opus">route equivalence-break · opus</span> <span class="chip gate">G_REVIEW_BLOCK</span></span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Read</span><span class="chip tool">Grep</span><span class="chip tool">Glob</span><span class="chip tool">Bash</span></span></div>
+          <div class="arow"><span class="k">flow</span><span class="v">Aggregate into <code>findings.json</code> (never drop/merge/downgrade). <span class="chip gate">G_REVIEW_BLOCK</span> blocks if surviving critical equivalence-break &gt; 0; no recommendation before the gate passes.</span></div>
+        </div>
+      </div>
+
+      <div class="acard">
+        <div class="ahead"><span class="aname">factcheck-extract + verify</span><span class="cat factcheck">fact-check</span></div>
+        <p class="role">Three-stage doc fact-check. <b>extract</b> (haiku) splits a doc into atomic claims; <b>verify</b> workers (sonnet, one per claim, parallel) search the local codebase and assign <code>true/false/unverifiable</code> with evidence; a correction pass rewrites flagged claims.</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v"><code>extract.json {claims[]}</code> → per-claim <code>verify-&lt;id&gt;.json {verdict,evidence}</code> → <code>correct-&lt;id&gt;.json</code> for false/unverifiable.</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v">Via <code>/fact-check</code>: <span class="chip">init --schema fact-check</span> <span class="chip model-haiku">route claim-extract · haiku</span> <span class="chip model-sonnet">route claim-verify · sonnet</span> <span class="chip">complete --handoff</span></span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Read</span><span class="chip tool">Grep</span><span class="chip tool">Glob</span><span class="chip tool">Bash</span></span></div>
+          <div class="arow"><span class="k">flow</span><span class="v">No blocking gate; output is a verified/corrected report — not auto-merged into the source.</span></div>
+        </div>
+      </div>
+
+      <div class="acard">
+        <div class="ahead"><span class="aname">auditor-worker</span><span class="cat audit">brownfield audit</span></div>
+        <p class="role">Per-domain auditor (one Task per domain, ~50-file cap) that inventories an existing codebase: what is built (every claim file+line evidence-backed), gaps with priority, weak points, ops-readiness, proposed bridge tasks.</p>
+        <div class="rows">
+          <div class="arow"><span class="k">does</span><span class="v"><code>audit-&lt;domain&gt;.json {built[evidence],gaps[priority],weakPoints[],opsReadiness[],proposedTasks[],invariants_at_risk[]}</code>.</span></div>
+          <div class="arow"><span class="k">calls</span><span class="v">Via <code>/audit</code>: <span class="chip">init --schema brownfield</span> <span class="chip model-sonnet">route finding-analysis</span> <span class="chip model-opus">route adversary</span> <span class="chip">handoff-check audit</span> <span class="chip gate">G_AUDIT</span> <span class="chip gate">G_OPS_CONFIG</span> <span class="chip gate">G_PLAN</span></span></div>
+          <div class="arow"><span class="k">tools</span><span class="v"><span class="chip tool">Read</span><span class="chip tool">Grep</span><span class="chip tool">Glob</span><span class="chip tool">Bash</span></span></div>
+          <div class="arow"><span class="k">flow</span><span class="v"><span class="chip gate">G_AUDIT</span> blocks unevidenced built items → <span class="chip gate">G_OPS_CONFIG</span> blocks <code>enforced=false</code> → <span class="chip gate">G_PLAN</span> blocks coarse tasks before <code>/define</code> seeds AC from <code>proposedTasks[]</code>.</span></div>
+        </div>
+      </div>
+
+      <div class="acard span2" style="border-style:dashed; background:var(--paper-2);">
+        <div class="ahead"><span class="aname">+ the forked specialist roster <span class="verbatim">verbatim · 52 agents</span></span><span class="cat architect">inherited</span></div>
+        <p class="role">Sitting <em>beside</em> the harness workers — and outside the gate spine — is AgentSpec's intact roster: <b>52 KB-grounded specialist agents</b> (architect&nbsp;8, cloud&nbsp;10, data-engineering&nbsp;15, platform&nbsp;6, python&nbsp;6, test&nbsp;3, dev&nbsp;4) plus <b>24 KB domains / 333 files</b>. Each carries the KB-first cognitive framework: read only <code>index.md</code> on activation, load patterns on demand, score confidence against a rubric (base 0.50 ± KB/MCP/codebase evidence), per-agent threshold, machine-readable <code>stop_conditions</code> + <code>escalation_rules</code>. The harness workers route to these specialists by intent; the specialists are <b>byte-identical to AgentSpec</b> and were not modified (see Part C).</p>
+      </div>
+
+    </div>
+
+    <h3 class="sec" id="commands"><span class="num">A2</span>Commands quick reference</h3>
+    <p class="tight">Commands are the only model-execution layer. Each is a thin orchestrator that dispatches a worker on a routed tier and branches on <code class="mono">spin</code>'s exit code.</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Command</th><th>Purpose</th><th>Key spin calls</th></tr></thead>
+        <tbody>
+          <tr><td><span class="cmd">/spin</span></td><td>Read-only orientation. Reports active run, the workflow map, and recommends the exact next command/gate. Never mutates state.</td><td><code>state</code> · <code>next</code> · <code>order</code> · <code>route</code></td></tr>
+          <tr><td><span class="cmd">/brainstorm</span></td><td>Phase 0 (optional). Opus dialogue → <code>BRAINSTORM.md</code> + define-schema handoff. No gate; recommends <code>/define</code>.</td><td><code>next</code> · <code>route define-intent</code> · <code>complete brainstorm --handoff</code></td></tr>
+          <tr><td><span class="cmd">/define</span></td><td>Phase 1. define-worker (opus) → <code>DEFINE.md</code> + handoff, validate, gate, recommend <code>/design</code>.</td><td><code>route define-intent</code> · <code>validate</code> · <span class="chip gate">G_DEFINE</span></td></tr>
+          <tr><td><span class="cmd">/design</span></td><td>Phase 2. Gate G_DEFINE first, design-worker (opus) → <code>DESIGN.md</code> + manifest handoff, gate.</td><td><span class="chip gate">G_DEFINE</span> · <code>route design-intent</code> · <span class="chip gate">G_DESIGN</span></td></tr>
+          <tr><td><span class="cmd">/build</span></td><td>Phase 3. Gate G_DESIGN, fan out one build-worker per manifest file in true parallel, bounded retry, then G_BUILD decides in code — no checkbox.</td><td><span class="chip gate">G_DESIGN</span> · <code>route code-build</code> · <code>diff-criteria</code> · <code>spec-drift</code> · <span class="chip gate">G_BUILD</span></td></tr>
+          <tr><td><span class="cmd">/ship</span></td><td>Phase 4. Gate G_BUILD, diff criteria, gate G_SHIP, reconcile corrected_spec drift, ship-worker (haiku) archives.</td><td><span class="chip gate">G_BUILD</span> · <code>diff-criteria</code> · <span class="chip gate">G_SHIP</span> · <code>spec-drift --build</code></td></tr>
+          <tr><td><span class="cmd">/iterate</span></td><td>Cross-phase. Update a BRAINSTORM/DEFINE/DESIGN doc mid-stream with version tracking; cascade downstream (DESIGN change → rebuild via /build).</td><td><span style="color:var(--ink-3)">document-level; no gate spine</span></td></tr>
+          <tr><td><span class="cmd">/review</span></td><td>Parallel adversarial review. Fan out arch + security (sonnet), dedup by file+line, challenge every critical with review-judge (opus), drop refuted, gate.</td><td><code>route finding-analysis</code> · <code>route review-judge</code> · <span class="chip gate">G_REVIEW_BLOCK</span></td></tr>
+          <tr><td><span class="cmd">/migrate</span></td><td>Highest-risk rewrite. Two competing plans (dbt vs spark), engine from the data, independent equivalence-worker + opus adversary, gate before recommending.</td><td><code>route migration-plan</code> · <code>route equivalence-break</code> · <span class="chip gate">G_REVIEW_BLOCK</span></td></tr>
+          <tr><td><span class="cmd">/create-kb</span></td><td>Author a governed KB domain: scaffold, manifest, fan out one concept-worker per slug, assemble index. <code>--audit</code> re-runs only the gates.</td><td><code>init --schema kb</code> · <code>route kb-concept</code> · <span class="chip gate">G_KB_STRUCTURE</span> · <span class="chip gate">G_KB_COVERAGE</span></td></tr>
+          <tr><td><span class="cmd">/audit</span></td><td>Brownfield Phase 0. Init brownfield run, fan out one evidence-backed auditor per domain, gate, then recommend G_OPS_CONFIG + G_PLAN before <code>/define</code>.</td><td><code>init --schema brownfield</code> · <span class="chip gate">G_AUDIT</span> · <span class="chip gate">G_OPS_CONFIG</span> · <span class="chip gate">G_PLAN</span></td></tr>
+          <tr><td><span class="cmd">/fact-check</span></td><td>Three-stage doc verification: extract (haiku) → parallel verify (sonnet) → parallel correction. spin sequences + validates every claim handoff. No blocking gate.</td><td><code>init --schema fact-check</code> · <code>route claim-extract</code> · <code>route claim-verify</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sec" id="flows"><span class="num">A3</span>Canonical end-to-end flows</h3>
+
+    <div class="flow">
+      <p class="flow-title">The SDD greenfield cycle</p>
+      <ol class="steps">
+        <li><span class="st"><code>/spin</code> — orient</span><span class="sd">Read-only: where am I, what's next, which gate. Mutates nothing.</span></li>
+        <li><span class="st"><code>/brainstorm</code> — Phase 0, optional</span><span class="sd">Opus dialogue → <code>BRAINSTORM.md</code>. No gate; skipping straight to define is valid.</span></li>
+        <li><span class="st"><code>/define</code> → <code>DEFINE.md</code> + <code>define.json</code></span><span class="sd">define-worker (opus). Clears <span class="gatepill">G_DEFINE</span></span></li>
+        <li><span class="st"><code>/design</code> → <code>DESIGN.md</code> + manifest</span><span class="sd">design-worker (opus) writes the File Manifest table. Clears <span class="gatepill">G_DESIGN</span></span></li>
+        <li><span class="st"><code>/build</code> — fan out per manifest file</span><span class="sd">build-worker × N in true parallel, bounded retry (<code>config.build_retry_cap</code>), aggregate build-report. <span class="gatepill">G_BUILD</span> verifies file-existence + criteria-diff <em>in code</em> — no checkbox.</span></li>
+        <li><span class="st"><code>/ship</code> — diff, gate, reconcile, archive</span><span class="sd">diff-criteria (define vs build) → <span class="gatepill">G_SHIP</span> → reconcile <code>corrected_spec</code> via spec-drift → ship-worker (haiku) writes <code>SHIPPED.md</code> + <code>LESSONS.md</code> → <code>spin complete ship</code>.</span></li>
+      </ol>
+    </div>
+
+    <div class="flow">
+      <p class="flow-title">KB-authoring lane — <code>/create-kb</code></p>
+      <ol class="steps">
+        <li><span class="st">init</span><span class="sd"><code>spin init --schema kb</code> → drive <code>spin next</code> until complete.</span></li>
+        <li><span class="st">Wave A — manifest</span><span class="sd">Single sonnet worker → <code>manifest.json</code> of concept slugs.</span></li>
+        <li><span class="st">Wave B — concepts (parallel fan-out)</span><span class="sd">One kb-concept-worker per slug, each writes <code>concept-&lt;slug&gt;.md</code> + sidecar with E-1 <code>needs_decoding</code> honesty.</span></li>
+        <li><span class="st">Wave C — assembly</span><span class="sd">Haiku mechanical pass writes quick-reference + index.</span></li>
+        <li><span class="st">Gates</span><span class="sd"><span class="gatepill">G_KB_STRUCTURE</span> <span class="gatepill">G_KB_COVERAGE</span> — <code>--audit</code> re-runs only these two against the KB on disk.</span></li>
+      </ol>
+    </div>
+
+    <div class="flow">
+      <p class="flow-title">Adversarial review — <code>/review</code> (and the <code>/migrate</code> twin)</p>
+      <ol class="steps">
+        <li><span class="st">Fan out the pair</span><span class="sd">arch-worker + security-worker (sonnet) dispatched in one message.</span></li>
+        <li><span class="st">Validate &amp; merge</span><span class="sd"><code>spin handoff-check finding</code> (bounded retry) → dedup by <code>(file,line)</code>, keep higher severity.</span></li>
+        <li><span class="st">Challenge every critical</span><span class="sd">review-judge (opus) fans out one challenger per critical to <em>refute</em> with independent evidence — anti-anchoring, no generator reasoning.</span></li>
+        <li><span class="st">Survivors → gate</span><span class="sd">Refuted findings dropped; survivors → <code>findings.json</code> → <span class="gatepill">G_REVIEW_BLOCK</span> exit 1 if any critical survives.</span></li>
+        <li><span class="st">/migrate reuses this spine</span><span class="sd">Two competing plans + independent equivalence-worker + opus equivalence-break adversary, strict separation of duties — same G_REVIEW_BLOCK.</span></li>
+      </ol>
+    </div>
+
+    <div class="flow">
+      <p class="flow-title">Brownfield audit → SDD handoff — <code>/audit</code></p>
+      <ol class="steps">
+        <li><span class="st">init brownfield</span><span class="sd"><code>spin init --schema brownfield</code> → read <code>audit-domains.yaml</code>.</span></li>
+        <li><span class="st">Fan out evidence-backed auditors</span><span class="sd">One auditor-worker per domain (one Task message, <code>max_files</code> cap), each claim file+line backed.</span></li>
+        <li><span class="st">Validate + merge sidecars</span><span class="sd"><code>spin handoff-check audit</code> per domain (bounded retry) → merge → <code>spin complete audit --handoff</code>.</span></li>
+        <li><span class="st">Three gates</span><span class="sd"><span class="gatepill">G_AUDIT</span> blocks unevidenced built items → <span class="gatepill">G_OPS_CONFIG</span> blocks <code>enforced=false</code> → <span class="gatepill">G_PLAN</span> blocks coarse tasks / blocking gaps with no proposed task.</span></li>
+        <li><span class="st">Seed the SDD cycle</span><span class="sd"><code>/define</code> seeds acceptance criteria from <code>proposedTasks[]</code>, then continues into the standard /design → /build → /ship cycle.</span></li>
+      </ol>
+    </div>
+
+    <h3 class="sec" id="abi"><span class="num">A4</span>Command surface &amp; the exit-code ABI</h3>
+    <p>Every command branches strictly on <code class="mono">spin</code>'s four-value exit code. <code class="mono">spin</code> is deterministic and never runs a model; the model only runs inside the slash command.</p>
+
+    <div class="abi-grid">
+      <div class="abi pass"><div class="code">0</div><div class="lbl">pass</div><div class="desc">Gate cleared / handoff valid. Proceed.</div></div>
+      <div class="abi block"><div class="code">1</div><div class="lbl">blocked</div><div class="desc">Gate blocked <em>or</em> handoff invalid. STOP — do not advance, never fake completion.</div></div>
+      <div class="abi usage"><div class="code">2</div><div class="lbl">usage</div><div class="desc">Bad invocation / argument error.</div></div>
+      <div class="abi intern"><div class="code">3</div><div class="lbl">internal</div><div class="desc">CLI internal error.</div></div>
+    </div>
+
+    <p class="tight">Completion is recorded <em>only</em> by <code class="mono">spin complete &lt;id&gt; --handoff</code>, which validates the worker JSON against its Zod schema (<code class="mono">G_HANDOFF</code>) and only then marks the artifact done — no skippable validate-then-mark seam. Phases clear only via <code class="mono">spin gate &lt;id&gt;</code>. Every retry loop is bounded by <code class="mono">spin retry &lt;id&gt; --inc</code> then <code class="mono">--ok</code>; hitting the config-driven ceiling exits 1 = STOP.</p>
+
+    <div class="surface-cols">
+      <div class="panel">
+        <h5>Named gates · <code>spin gate &lt;id&gt;</code></h5>
+        <ul>
+          <li><code>G_DEFINE</code> <span>· Why/What + ≥3 AC-n</span></li>
+          <li><code>G_DESIGN</code> <span>· manifest + valid handoff</span></li>
+          <li><code>G_BUILD</code> <span>· files exist, criteria-diff empty, evidence present</span></li>
+          <li><code>G_SHIP</code> <span>· all criteria passed, drift reconciled</span></li>
+          <li><code>G_KB_STRUCTURE</code> · <code>G_KB_COVERAGE</code></li>
+          <li><code>G_REVIEW_BLOCK</code> <span>· any surviving critical → block</span></li>
+          <li><code>G_AUDIT</code> · <code>G_OPS_CONFIG</code> · <code>G_PLAN</code></li>
+          <li><code>G_ROUTER_COVERAGE</code> · <code>G_HANDOFF</code></li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h5>Deterministic verbs · <code>spin &lt;verb&gt;</code></h5>
+        <ul>
+          <li><code>init --schema</code> <span>· start a run (sdd/kb/brownfield/fact-check)</span></li>
+          <li><code>state</code> · <code>status</code> · <code>next</code> · <code>order</code></li>
+          <li><code>route &lt;kind&gt;</code> <span>· tier + model resolution</span></li>
+          <li><code>tier</code> <span>· T0/T1/T2 orchestration axis</span></li>
+          <li><code>complete --handoff</code> · <code>retry --inc/--ok</code></li>
+          <li><code>validate</code> · <code>handoff-check</code> · <code>diff-criteria</code></li>
+          <li><code>spec-drift</code> · <code>config-drift</code> · <code>reconcile</code></li>
+          <li><code>schema show|validate</code> · <code>explain &lt;gateId&gt;</code> · <code>kinds</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ============================================================ PART B -->
+    <section class="part-banner" id="partB">
+      <span class="pl">Part B</span>
+      <h2>Spindle vs AgentSpec, ECC &amp; OpenSpec</h2>
+      <p class="sub">All four are MIT-licensed Claude Code / spec-driven projects. They overlap on doctrine but diverge sharply on what is <em>enforced in code</em> versus documented as convention.</p>
+    </section>
+
+    <h3 class="sec" id="compare"><span class="num">B1</span>Capability matrix</h3>
+    <div class="tbl-wrap">
+      <table class="cmp">
+        <thead>
+          <tr>
+            <th>Capability</th>
+            <th class="col-spin">Spindle</th>
+            <th class="col-agentspec">AgentSpec</th>
+            <th class="col-ecc">ECC</th>
+            <th class="col-openspec">OpenSpec</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>SDD 5-phase doctrine</td>
+            <td><span class="yes">Yes</span> — inherited from AgentSpec, re-encoded to drive the CLI</td>
+            <td><span class="yes">Yes</span> — origin; <code>WORKFLOW_CONTRACTS.yaml</code></td>
+            <td><span class="yes">Yes</span> — same 5 phases as skills</td>
+            <td><span class="partial">Partial</span> — change/spec model, not phased</td>
+          </tr>
+          <tr>
+            <td>Deterministic spine (no-model CLI)</td>
+            <td><span class="yes">Yes</span> — <code>spin</code>, CI-guarded never to call a model</td>
+            <td><span class="no">No</span> — prose agents; <code>judge.py</code> wraps a model call</td>
+            <td><span class="no">No</span> — scattered hook/install scripts</td>
+            <td><span class="yes">Yes</span> — commander TS core, model-free</td>
+          </tr>
+          <tr>
+            <td>Gates as exit-code functions</td>
+            <td><span class="yes">Yes</span> — 11-file gate engine, <code>(ctx)⇒GateResult</code></td>
+            <td><span class="partial">Prose</span> — quality gates are checklists in YAML</td>
+            <td><span class="partial">Prose</span> — hook budgets, no SDD gate-runner</td>
+            <td><span class="no">No</span> — has a spec validator, no phase gates</td>
+          </tr>
+          <tr>
+            <td>Exit-code ABI</td>
+            <td><span class="yes">Yes</span> — uniform 4-value (0/1/2/3) across the CLI</td>
+            <td><span class="partial">Partial</span> — codes only inside <code>judge.py</code></td>
+            <td><span class="partial">Partial</span> — a few scripts use 2/3</td>
+            <td><span class="partial">Partial</span> — binary 0/1 convention</td>
+          </tr>
+          <tr>
+            <td>Artifact dependency graph</td>
+            <td><span class="yes">Yes</span> — ported from OpenSpec (Kahn topo-sort)</td>
+            <td><span class="no">No</span></td>
+            <td><span class="no">No</span></td>
+            <td><span class="yes">Yes</span> — origin of the graph</td>
+          </tr>
+          <tr>
+            <td>Specialist agent roster</td>
+            <td><span class="yes">52 specialists</span> — forked verbatim + 13 harness workers</td>
+            <td><span class="yes">58 agents</span> — origin of the roster</td>
+            <td><span class="yes">67 agents</span> — independent, broader harness</td>
+            <td><span class="no">No</span></td>
+          </tr>
+          <tr>
+            <td>Model / tier routing</td>
+            <td><span class="yes">Yes</span> — resolver code; doctrine from ECC, enforcement rules original</td>
+            <td><span class="partial">Per-phase</span> — fixed model per phase</td>
+            <td><span class="yes">Doctrine</span> — Haiku/Sonnet/Opus tier thinking (origin)</td>
+            <td><span class="no">No</span></td>
+          </tr>
+          <tr>
+            <td>Skills / authoring conventions</td>
+            <td><span class="yes">Yes</span> — 4 forked + 5 new harness skills</td>
+            <td><span class="yes">5 skills</span></td>
+            <td><span class="yes">271 skills</span> — canonical authoring reference</td>
+            <td><span class="no">No</span></td>
+          </tr>
+          <tr>
+            <td>HTML presentation feature</td>
+            <td><span class="partial">Forked</span> — visual-explainer, inherited two levels deep</td>
+            <td><span class="yes">Yes</span> — bundles nicobailon's MIT skill</td>
+            <td><span class="no">No</span></td>
+            <td><span class="no">No</span></td>
+          </tr>
+          <tr>
+            <td>Spec format</td>
+            <td><span class="yes">schema.yaml</span> — OpenSpec shape + 4 added fields + 10 Zod handoff schemas (original)</td>
+            <td><span class="partial">YAML contracts</span> — prose workflow contracts</td>
+            <td><span class="partial">Markdown</span> — rules/skills conventions</td>
+            <td><span class="yes">schema.yaml + spec-deltas</span> — origin of the format</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="legend-row">
+      <span><b class="yes">Yes</b> — present, first-class</span>
+      <span><b class="partial">Partial / Prose</b> — present but as convention, not enforced</span>
+      <span><b class="no">No</b> — absent</span>
+    </div>
+
+    <!-- ============================================================ PART C -->
+    <section class="part-banner" id="partC">
+      <span class="pl">Part C</span>
+      <h2>Authenticity &amp; provenance</h2>
+      <p class="sub">The honest part. Every claim below is the adversarially-reviewed version — contested claims are stated in their corrected form. The LICENSE and file headers attribute all three upstreams accurately; the provenance is honest, not aspirational.</p>
+    </section>
+
+    <h3 class="sec" id="share"><span class="num">C1</span>The honest share</h3>
+    <p>Spindle is roughly <b>one-third genuinely original engineering and two-thirds assembled-or-forked content</b>. By file count it is mostly inherited AgentSpec; by engineering novelty and product thesis the ratio inverts — the original third is the entire reason the project exists.</p>
+
+    <div class="prov-bar" role="img" aria-label="Provenance by file count: about 65 percent forked from AgentSpec, 27 percent original Spindle code, 10 percent ported from OpenSpec.">
+      <div class="pb-agentspec">Forked · AgentSpec ~65%</div>
+      <div class="pb-spin">Original ~27%</div>
+      <div class="pb-openspec">Ported ~10%</div>
+    </div>
+    <p class="prov-bar-cap">By file count. ECC's footprint is conceptual only — no ECC file was copied, so it does not appear on the bar. By engineering novelty the proportions invert: the original deterministic spine is the point, the OpenSpec port is its load-bearing foundation, and the AgentSpec fork is the payload it orchestrates.</p>
+
+    <h3 class="sec" id="original"><span class="num">C2</span>Original to Spindle</h3>
+
+    <div class="prov-card">
+      <div class="ph"><span class="badge b-original">Original</span><span class="src"><b>Spindle</b> · the harness spine + KB-authoring machinery</span></div>
+      <div class="pbody">
+        <ul class="plist">
+          <li>The <code>spin</code> CLI and its <b>uniform 4-value exit-code ABI</b> on a spine a CI guard proves never calls a model. <span class="corrected"><span class="ck">corrected</span>The bare idea of distinct exit codes is <em>not</em> novel — AgentSpec's <code>judge.py</code> already uses 0/1/2/3/4, and OpenSpec's CLI has a binary 0/1 contract. Spindle's actual contribution is the <em>combination</em>: a uniform ABI across the whole CLI, plus the CI-tested no-model guard wrapping a gate registry. AgentSpec's codes live inside a single model-<em>calling</em> helper, not a no-model spine.</span></li>
+          <li>The <b>named gate engine</b> (<code>src/core/gates/</code>, 11 files) — pure <code>(GateContext)⇒GateResult</code> functions reading filesystem + run-state only. Includes the <b>phantom-criterion check</b> (block a passed AC that DEFINE never declared, via both-ways criteria-diff) and the <b>verified_by evidence check</b> (a passed criterion citing a path must point at a file that exists). No counterpart in OpenSpec or AgentSpec.</li>
+          <li>The <b>crash-safe run-state ledger</b> <code>.spindle/run.json</code> — CLI-written-only, atomic temp+rename, Zod-validated on every read. The keystone that makes gates idempotent and re-runnable after a crash. <span class="verbatim">grep: 0 hits upstream</span></li>
+          <li><b>spec-drift</b> as a first-class typed loop (<code>corrected_spec/correction/reconciled</code>), born from Spindle's own pix-brcode dogfood where a factually-wrong CRC criterion passed every gate. A different concept from OpenSpec's requirement-level deltas.</li>
+          <li>The <b>10 Zod handoff schemas</b> + the atomic validate-then-mark seam inside <code>spin complete --handoff</code> — the non-skippable boundary that prevents an LLM from self-marking done.</li>
+          <li>The <b>model-route resolver code</b> (<code>policy.ts</code> + <code>tiers.ts</code>). <span class="corrected"><span class="ck">corrected</span>The three-tier <em>model-selection</em> doctrine is borrowed from ECC. But two principles are Spindle/Ivis originals, not ECC lineage: the enforcement rules (<em>verifier outranks-or-equals generator on critical gates</em>; <em>critical kinds never downgrade</em>) appear nowhere in ECC, and the T0/T1/T2 orchestration-tier axis is the user's own cost-discipline lesson. All resolver code is original — no upstream file copied.</span></li>
+          <li>The <b>no-model CI guard</b> (<code>test/e2e/guard.test.ts</code>) — greps all of <code>src/</code> for <code>fetch(</code> / <code>api.anthropic.com</code> / <code>claude -p</code> / <code>@anthropic</code> / <code>openai</code> and fails the build. Turns the deterministic-spine invariant into a verifiable property.</li>
+          <li>The <b>13 typed harness workers</b> and the KB-authoring lane's gate machinery (<code>kb-gates.ts</code>). <span class="corrected"><span class="ck">corrected</span>The actual 13 are: 4 workflow <code>*-worker</code>, the single <code>challenger</code> adversary (one agent, opus-routed), <code>arch-worker</code> + <code>security-worker</code>, <code>kb-concept-worker</code>, <code>migrate dbt/spark/equivalence</code> (3), and <code>factcheck extract/verify</code> (2). There is <em>no</em> separate "auditor-worker" agent — auditing is the <code>/audit</code> command dispatching the review workers.</span></li>
+        </ul>
+        <p style="font-size:13px;color:var(--ink-3);margin:14px 0 0;">Honest limit, on the record: gates certify <em>structure and identity</em>, not truth. They prove a file exists, a criterion is passed, a verifier is cited, criteria sets are consistent — they cannot prove a CRC value is correct or a prose claim is true.</p>
+      </div>
+    </div>
+
+    <h3 class="sec" id="ported"><span class="num">C3</span>Ported from OpenSpec</h3>
+    <div class="prov-card">
+      <div class="ph"><span class="badge b-ported">Ported</span><span class="src"><b>OpenSpec</b> (MIT, © 2024) · the deterministic graph foundation <span class="verbatim">"Ported verbatim" headers</span></span></div>
+      <div class="pbody">
+        <ul class="plist">
+          <li><code>src/core/artifact-graph/*</code> — the deterministic spine. <code>graph.ts</code> carries the header "Ported verbatim from OpenSpec (MIT)"; the Kahn topo-sort (<code>getBuildOrder</code>) and <code>getNextArtifacts/isComplete/getBlocked</code> are line-for-line identical. <code>schema.ts</code> (load + Zod-validate + duplicate-id + dangling-require + DFS cycle detection) is ported name-for-name.</li>
+          <li><code>types.ts</code> — <b>ported and extended</b> with the four fields OpenSpec lacks: <code>model</code>, <code>handoff</code>, <code>parallel_group</code>, <code>validate</code>. <code>state.ts</code> / <code>outputs.ts</code> ported with minor simplification (drops the <code>FileSystemUtils</code> dependency).</li>
+          <li>The <b><code>schema.yaml</code> artifact-graph data format</b> (<code>name/version/artifacts[]</code> with <code>id/generates/template/instruction/requires</code>) is OpenSpec's; Spindle reuses the shape and layers on <code>config</code> + <code>gates</code> + the four fields.</li>
+          <li><b>CLI ship mechanics</b> — <code>bin/spin.js</code> mirrors OpenSpec's <code>bin/openspec.js</code> (changed so <code>runCli</code> returns an exit code); <code>package.json</code> copies <code>type:module</code> + bin map + build/test script shape + commander/yaml/zod deps + the vitest devDep. <span class="corrected"><span class="ck">corrected</span>esbuild is <em>not</em> an OpenSpec dependency — OpenSpec's build is tsc-emit only. The esbuild single-bundle step and the <code>plugin/</code> sync are Spindle-original additions on top of OpenSpec's tsc scaffold.</span></li>
+        </ul>
+        <p style="font-size:13px;color:var(--ink-3);margin:14px 0 0;">What Spindle did <em>not</em> port: OpenSpec's spec-delta model (ADDED/MODIFIED/REMOVED/RENAMED Requirements). Grep across all of Spindle's <code>src/</code> returns zero delta hits — this is foundational but correctly-attributed reuse, not original work.</p>
+      </div>
+    </div>
+
+    <h3 class="sec" id="forked"><span class="num">C4</span>Forked from AgentSpec</h3>
+    <div class="prov-card">
+      <div class="ph"><span class="badge b-forked">Forked</span><span class="src"><b>AgentSpec</b> (MIT, © 2026) · the bulk by volume <span class="verbatim">cmp / diff -rq verified</span></span></div>
+      <div class="pbody">
+        <ul class="plist">
+          <li>The <b>52 specialist agents</b> (architect 8, cloud 10, data-engineering 15, platform 6, python 6, test 3, dev 4) plus the KB-First cognitive-framework README — a <b>byte-identical, cmp-identical fork</b>. <span class="corrected"><span class="ck">corrected</span>The count is <em>52</em>, not 53. AgentSpec's full roster is 58 = these 52 + 6 workflow agents, which Spindle replaced. Spindle's <code>plugin/agents</code> holds 66 .md vs AgentSpec's 59 — a net +7 that is 9 new harness worker files plus 4 renamed <code>*-worker.md</code>, minus the 6 original <code>*-agent.md</code> (brainstorm and iterate dropped). None of the new files are net-new specialists.</span></li>
+          <li>The entire <b>knowledge base — 24 domains, 333 files</b>. Verified: <code>diff -rq</code> over AgentSpec's <code>kb</code> vs Spindle's produced 0 lines (0 differ, 0 only-on-one-side). Wholesale-inherited content, not authored. <span class="verbatim">333/333 identical</span></li>
+          <li>The <b>HTML-presentation feature</b> — the <code>visual-explainer</code> skill (SKILL.md, references, share.sh, 4 templates) is a byte-identical fork of AgentSpec's skill, which itself bundles a third-party MIT skill (author nicobailon, v0.5.1). Inherited <em>two levels deep</em>; Spindle contributes nothing original to the skill itself. <span class="corrected"><span class="ck">corrected</span>The skill is verbatim, but the <code>/fact-check</code> <em>command</em> is <strong>not</strong> a fork — Spindle rewrote it into an original harness-native pipeline (spin-orchestrated haiku extract + parallel sonnet verify/correct). 7 of 8 visual-explainer commands are byte-identical; fact-check is original Spindle work.</span></li>
+          <li>The <b>command surface</b>: of the 31 commands present in both repos, <b>21 are byte-identical</b> (the data-engineering surface, core/*, review/judge, visual-explainer set) and 10 differ. <span class="corrected"><span class="ck">corrected</span>Replace the loose "24 of 34" — that figure counted 3 unchanged README.md files as commands. Stated consistently it is <em>21 of 31 shared commands byte-identical</em> (34 total files including the 3 net-new <code>core/spin</code>, <code>core/audit</code>, <code>core/gen-router</code>).</span></li>
+          <li>The <b>SDD 5-phase doctrine</b> itself — taken from AgentSpec but <b>re-encoded, not copied</b>. AgentSpec's 6 prose workflow agents are replaced by 4 typed harness workers; the workflow command <code>build.md</code> contains many <code>spin</code> references vs 0 in AgentSpec. The phase model is forked; its enforcement is original.</li>
+          <li><b>Plugin packaging shell</b> — <code>plugin.json</code> + <code>marketplace.json</code> structurally inherited, and the SessionStart <code>hooks.json</code> wiring is byte-identical. <span class="corrected"><span class="ck">corrected</span>The shell is borrowed, but the <em>tooling</em> was not: Spindle has no <code>build-plugin.sh</code> and no agent-router generator; its <code>init-workspace.sh</code> is a tiny CLI-bundle check that deliberately does <em>not</em> scaffold the workspace or override directories; and its <code>build.js</code> is OpenSpec-derived, not AgentSpec's. AgentSpec's path-rewriting and router generation were not adopted.</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 class="sec" id="borrowed"><span class="num">C5</span>Borrowed from ECC</h3>
+    <div class="prov-card">
+      <div class="ph"><span class="badge b-borrowed">Borrowed</span><span class="src"><b>ECC</b> (MIT, © 2026) · doctrine, not code — no file copied</span></div>
+      <div class="pbody">
+        <ul class="plist">
+          <li>The <b>harness-pattern doctrine</b> — adversarial gate, bounded loop, parallel fan-out — captured as <b>4 new Spindle skills</b> (no ECC file copied; ECC has no skill by these names). The three-tier Haiku/Sonnet/Opus model-selection doctrine is ECC's and Spindle's model-routing skill says so explicitly.</li>
+          <li><b>ECC's autonomous-agent-harness is borrowed by negation</b> — as an explicit anti-pattern to correct. ECC's fake-dispatch (shelling to <code>claude -p</code> at line 102, <code>curl … api.anthropic.com/dispatch</code> at line 123 of its SKILL.md — both verified present) is cited by name in Spindle's <code>bounded-loop/SKILL.md</code>, which replaces it with Task-tool fan-out on a routed model + a CLI-enforced retry cap. The no-model guard makes the correction a CI-enforced invariant. <em>The lesson came from ECC; the implementation is the opposite.</em></li>
+        </ul>
+        <p style="font-size:13px;color:var(--ink-3);margin:14px 0 0;">ECC's footprint is the smallest and is purely conceptual. The enforcement rules and the orchestration-tier axis that the doctrine is wired into are Spindle/Ivis originals (see C2).</p>
+      </div>
+    </div>
+
+    <div class="honest" id="verdict">
+      <h3>The honest read</h3>
+      <p>By <b>file count</b>, Spindle is ~60–70% forked AgentSpec content (52 specialist agents + 333 KB files + visual-explainer + most commands), ~10% ported OpenSpec core, and ~25–30% original Spindle code + new workers and skills. The 52 agents and 333 KB files that make Spindle look large are AgentSpec verbatim, and the HTML/visual feature is inherited two levels deep.</p>
+      <p>By <b>engineering novelty</b> and by <em>what is the actual product thesis</em>, the ratio inverts. The original deterministic spine — the <code>spin</code> CLI, the gate engine, the run-state ledger, spec-drift, the handoff schemas, the model-route resolver, and the no-model CI guard — is a thin but high-leverage slice: maybe 25–35% of the meaningful engineering and close to 100% of what is novel. It is what makes "an LLM SDD workflow that is actually testable" a real claim rather than a slogan.</p>
+      <p class="one-liner">Spindle did not write the specialists or the knowledge base — it wrote the testable, no-model harness that makes an LLM run them under gates, and it ported its graph foundation from OpenSpec.</p>
+    </div>
+
+    <p class="footnote">All four projects are MIT-licensed; a downstream fork inherits permissive reuse rights with attribution preserved. Spindle's <code>LICENSE</code> and file headers credit OpenSpec (artifact-graph spine + CLI build mechanics), AgentSpec (workflow doctrine + specialist roster + KB + data-engineering commands), and ECC (harness doctrine adapted into skills). Self-declared provenance was verified file-by-file via <code>cmp</code>, <code>diff -rq</code>, and grep — it matches the findings, and the contested claims above are stated in their adversarially-corrected form. Document generated for the Spindle repository (<code>ivisribeiro/spindle</code>).</p>
+
+  </main>
+</div>
+</body>
+</html>
