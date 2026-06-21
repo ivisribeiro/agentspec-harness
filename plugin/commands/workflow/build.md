@@ -132,8 +132,8 @@ Once every build unit has passed `spin complete`, assemble the phase-level
 {
   "feature": "<feature-slug>",
   "results": [
-    { "criterion": "AC-1", "status": "passed" },
-    { "criterion": "AC-2", "status": "passed" }
+    { "criterion": "AC-1", "status": "passed", "verified_by": "test/pix.test.ts" },
+    { "criterion": "AC-2", "status": "passed", "verified_by": "test/pix.test.ts" }
   ],
   "files_written": [
     ".spindle/features/<feature>/.handoffs/<id>.json",
@@ -144,6 +144,17 @@ Once every build unit has passed `spin complete`, assemble the phase-level
 
 `results[]` is the per-criterion roll-up across all `build-task` handoffs;
 `files_written[]` is the union of every file the workers wrote.
+
+**Two deterministic G_BUILD rules to honor (the spine enforces these — don't fight them):**
+
+- **Only report criteria DEFINE declared.** Every `criterion` MUST be an `AC-n` that
+  exists in DEFINE. Reporting a passing criterion DEFINE never declared is **phantom
+  set-drift** and `G_BUILD`/`G_SHIP` block on it (`unmet: phantom:AC-n`) — the spine
+  catches a build↔define mismatch without anyone disclosing it.
+- **Cite your proof with `verified_by`.** Set it to the test FILE that substantiates a
+  `passed` criterion. When it looks like a path, `G_BUILD` requires that file to exist on
+  disk (`unmet: evidence-missing:AC-n` if not) — so "passed" carries evidence, not a bare
+  claim. A command (e.g. `"npm run e2e"`) is accepted but not existence-checked.
 
 **Spec-drift honesty (the AC-content rule).** A gate certifies a criterion *ID*,
 not its *text*. If, while building, a worker finds that a criterion's stated

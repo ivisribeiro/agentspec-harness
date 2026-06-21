@@ -141,6 +141,90 @@ describe('G_BUILD (replaces the prose checkbox)', () => {
     const b = gBuild(ctx);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
+
+  function buildAllFiles() {
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src', 'a.ts'), '// a');
+    fs.writeFileSync(path.join(root, 'src', 'b.ts'), '// b');
+  }
+
+  it('BLOCKS a phantom criterion the build passes but DEFINE never declared (set-drift)', () => {
+    buildAllFiles();
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed' },
+        { criterion: 'AC-2', status: 'passed' },
+        { criterion: 'AC-9', status: 'passed' }, // not in DEFINE
+      ],
+    });
+    const r = gBuild(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('phantom:AC-9');
+  });
+
+  it('BLOCKS when a passed criterion cites a verified_by file that does not exist', () => {
+    buildAllFiles();
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed', verified_by: 'test/missing.test.ts' },
+        { criterion: 'AC-2', status: 'passed' },
+      ],
+    });
+    const r = gBuild(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('evidence-missing:AC-1');
+  });
+
+  it('PASSES when a cited verifier file exists', () => {
+    buildAllFiles();
+    fs.mkdirSync(path.join(root, 'test'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'test', 'x.test.ts'), '// t');
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed', verified_by: 'test/x.test.ts' },
+        { criterion: 'AC-2', status: 'passed' },
+      ],
+    });
+    expect(gBuild(ctx).passed).toBe(true);
+  });
+
+  it('does NOT require existence for a verified_by that is a command, not a path', () => {
+    buildAllFiles();
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed', verified_by: 'npm run e2e' },
+        { criterion: 'AC-2', status: 'passed' },
+      ],
+    });
+    expect(gBuild(ctx).passed).toBe(true);
+  });
+
+  // Adversary-found false-block vectors: none of these are POSIX repo paths, so they
+  // must be ACCEPTED without an existence check rather than blocking a legit build.
+  it('does NOT existence-check non-repo-path verified_by values (URL / Windows / version)', () => {
+    for (const v of [
+      'https://crccalc.com/run/123',
+      'http://ci.example.com/job/y.ts',
+      'C:\\Users\\dev\\test\\pix.test.ts',
+      'src\\a.ts',
+      'v1.2',
+      '1.0',
+    ]) {
+      buildAllFiles();
+      writeHandoff('build', {
+        feature: 'feat',
+        results: [
+          { criterion: 'AC-1', status: 'passed', verified_by: v },
+          { criterion: 'AC-2', status: 'passed' },
+        ],
+      });
+      expect(gBuild(ctx).passed, `verified_by=${v} should not false-block`).toBe(true);
+    }
+  });
 });
 
 describe('G_SHIP', () => {
@@ -154,6 +238,20 @@ describe('G_SHIP', () => {
     writeHandoff('define', { feature: 'feat', clarity: 1, criteria: ['AC-1'] });
     writeHandoff('build', { feature: 'feat', results: [{ criterion: 'AC-1', status: 'passed' }] });
     expect(gShip(ctx).passed).toBe(true);
+  });
+
+  it('BLOCKS a phantom criterion at ship (build/define set-drift)', () => {
+    writeHandoff('define', { feature: 'feat', clarity: 1, criteria: ['AC-1'] });
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed' },
+        { criterion: 'AC-7', status: 'passed' }, // not in DEFINE
+      ],
+    });
+    const r = gShip(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('phantom:AC-7');
   });
 
   it('passes but SURFACES spec-drift when the build corrected a criterion (I-C / F6)', () => {

@@ -109,7 +109,25 @@ interface BuildResults {
     corrected_spec?: boolean;
     correction?: string;
     reconciled?: boolean;
+    verified_by?: string;
   }>;
+}
+
+/**
+ * A verified_by value worth existence-checking on disk: a single POSIX repo-relative
+ * path token. Everything else is ACCEPTED WITHOUT a check rather than false-blocked —
+ * a command has a space ("npm run e2e"), a URL has a scheme ("http://…"), a Windows
+ * path has a backslash/drive ("C:\\…", "src\\a"), and a bare version is a dotted
+ * NUMBER ("v1.2", "1.0"). Only a separator or a real (letter-led) file extension on
+ * an otherwise plain token counts. (dogfood: adversary-confirmed false-block vectors.)
+ */
+function looksLikePath(v: string): boolean {
+  if (v.includes(' ')) return false; // command
+  if (v.includes('://')) return false; // URL citation
+  if (v.includes('\\')) return false; // Windows path — not a POSIX repo path
+  if (/^[a-zA-Z]:/.test(v)) return false; // Windows drive letter
+  // extension must start with a LETTER, so "v1.2" / "1.0" are not read as paths
+  return v.includes('/') || /\.[a-z][a-z0-9]{0,5}$/i.test(v);
 }
 
 /** G_BUILD — before /ship. Replaces the prose checkbox + max-3-retry. */
@@ -155,6 +173,26 @@ export function gBuild(ctx: GateContext): GateResult {
       reasons.push(`acceptance criterion not satisfied: ${id}`);
       unmet.push(id);
     }
+    // Phantom criteria: the build certifies passing a criterion DEFINE never
+    // declared — a build↔define SET drift the spine can catch DETERMINISTICALLY,
+    // with no reliance on the worker disclosing it (raises the §7 ceiling: gates
+    // no longer just match ids one-way, they enforce set-consistency both ways).
+    for (const id of diff.extra) {
+      reasons.push(`build certifies a criterion DEFINE never declared (phantom/drift): ${id}`);
+      unmet.push(`phantom:${id}`);
+    }
+  }
+
+  // Evidence-backed pass: a criterion that CITES a verifier (verified_by) which
+  // looks like a file must point at one that exists — "passed" carries proof,
+  // the same evidence-before-exit-0 rule G_AUDIT applies to built[] items.
+  for (const r of buildRes?.results ?? []) {
+    if (r.status === 'passed' && r.verified_by && looksLikePath(r.verified_by)) {
+      if (!fs.existsSync(path.join(ctx.root, r.verified_by))) {
+        reasons.push(`acceptance criterion ${r.criterion} cites a verifier that does not exist: ${r.verified_by}`);
+        unmet.push(`evidence-missing:${r.criterion}`);
+      }
+    }
   }
 
   return unmet.length === 0 ? pass(gate, ['build verified']) : block(gate, reasons, unmet);
@@ -180,6 +218,15 @@ export function gShip(ctx: GateContext): GateResult {
       gate,
       diff.unmet.map((id) => `unmet acceptance criterion: ${id}`),
       diff.unmet
+    );
+  }
+  // Set-consistency both ways: ship cannot certify a build that passes a criterion
+  // DEFINE never declared (phantom/drift the spine catches without disclosure).
+  if (diff.extra.length > 0) {
+    return block(
+      gate,
+      diff.extra.map((id) => `build certifies a criterion DEFINE never declared (drift): ${id}`),
+      diff.extra.map((id) => `phantom:${id}`)
     );
   }
   // Criteria are met — but surface any spec-drift the build flagged (F6). Shipping

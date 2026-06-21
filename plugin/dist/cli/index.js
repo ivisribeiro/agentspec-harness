@@ -20671,7 +20671,11 @@ var BuildReportHandoff = external_exports.object({
       // Set true once DEFINE.md has been updated to the correct value (dogfood
       // run #2, G2). `spin spec-drift` ignores a reconciled correction, so the
       // ship loop converges instead of exiting 1 forever after the fix.
-      reconciled: external_exports.boolean().default(false)
+      reconciled: external_exports.boolean().default(false),
+      // Optional evidence for a `passed` status: the test file / check that
+      // substantiates it. When it looks like a path, G_BUILD requires the file
+      // to exist — so "passed" can carry proof, not just a bare assertion.
+      verified_by: external_exports.string().optional()
     })
   ).default([]),
   files_written: external_exports.array(external_exports.string()).default([]),
@@ -20918,6 +20922,13 @@ function gDesign(ctx) {
   }
   return unmet.length === 0 ? pass(gate, ["design complete"]) : block(gate, reasons, unmet);
 }
+function looksLikePath(v) {
+  if (v.includes(" ")) return false;
+  if (v.includes("://")) return false;
+  if (v.includes("\\")) return false;
+  if (/^[a-zA-Z]:/.test(v)) return false;
+  return v.includes("/") || /\.[a-z][a-z0-9]{0,5}$/i.test(v);
+}
 function gBuild(ctx) {
   const gate = "G_BUILD";
   const reasons = [];
@@ -20952,6 +20963,18 @@ function gBuild(ctx) {
       reasons.push(`acceptance criterion not satisfied: ${id}`);
       unmet.push(id);
     }
+    for (const id of diff.extra) {
+      reasons.push(`build certifies a criterion DEFINE never declared (phantom/drift): ${id}`);
+      unmet.push(`phantom:${id}`);
+    }
+  }
+  for (const r of buildRes?.results ?? []) {
+    if (r.status === "passed" && r.verified_by && looksLikePath(r.verified_by)) {
+      if (!fs6.existsSync(path3.join(ctx.root, r.verified_by))) {
+        reasons.push(`acceptance criterion ${r.criterion} cites a verifier that does not exist: ${r.verified_by}`);
+        unmet.push(`evidence-missing:${r.criterion}`);
+      }
+    }
   }
   return unmet.length === 0 ? pass(gate, ["build verified"]) : block(gate, reasons, unmet);
 }
@@ -20971,6 +20994,13 @@ function gShip(ctx) {
       gate,
       diff.unmet.map((id) => `unmet acceptance criterion: ${id}`),
       diff.unmet
+    );
+  }
+  if (diff.extra.length > 0) {
+    return block(
+      gate,
+      diff.extra.map((id) => `build certifies a criterion DEFINE never declared (drift): ${id}`),
+      diff.extra.map((id) => `phantom:${id}`)
     );
   }
   const reasons = [`all ${define.criteria.length} acceptance criteria met`];
@@ -21751,7 +21781,9 @@ var GATE_DOCS = {
     blocks_when: [
       "BUILD_REPORT.md missing",
       "a file from the design manifest was not built",
-      "an acceptance criterion from DEFINE is not marked passed in the build results"
+      "an acceptance criterion from DEFINE is not marked passed in the build results",
+      "the build certifies a criterion DEFINE never declared (phantom/set-drift)",
+      "a passed criterion cites a verified_by file (path) that does not exist on disk"
     ],
     flags: []
   },
@@ -21760,7 +21792,10 @@ var GATE_DOCS = {
     purpose: "Final certification inside /ship: define.criteria minus build.passed must be empty.",
     reads: [".handoffs/define.json (criteria)", ".handoffs/build.json (results, incl. corrected_spec flags)"],
     handoff: "build-report",
-    blocks_when: ["any acceptance criterion in DEFINE is not satisfied by the build results"],
+    blocks_when: [
+      "any acceptance criterion in DEFINE is not satisfied by the build results",
+      "the build certifies a criterion DEFINE never declared (phantom/set-drift)"
+    ],
     flags: []
   },
   G_KB_STRUCTURE: {

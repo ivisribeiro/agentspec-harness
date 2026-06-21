@@ -2,6 +2,19 @@
 
 **AgentSpec made harness-native** — a Claude Code plugin that turns the AgentSpec SDD cycle (Brainstorm → Define → Design → Build → Ship) into a deterministic, gate-backed workflow where `spin` is the spine and Claude is the worker.
 
+> **The idea in one line:** separate the thing that *decides* from the thing that *generates*. Claude writes; a deterministic TypeScript CLI named `spin` decides what "done" means — and `spin` **never calls a model** (a CI grep-guard fails the build if `src/` so much as references `fetch(`). "Done" becomes a checkable verdict over files, evidence, and acceptance-criterion identity — returned as an exit code — not a self-marked checkbox.
+
+### Why it exists / what makes it different
+
+Most spec-driven AI tools have one blind spot: when every check is green, you assume the spec is right. Spindle is built to make that assumption *testable*. Versus a file-existence model (OpenSpec):
+
+- **"Done" can be a content verdict, not just a file existing** — for any artifact whose schema declares a `handoff:`, `spin complete` refuses to mark it done unless a Zod sidecar passes, and `G_BUILD` set-diffs every acceptance criterion. It also enforces criteria-set consistency *both ways* — blocking a **phantom** AC the build certifies that DEFINE never declared (an ID-set drift the spine catches with no disclosure; note this is *not* the same as a wrong-*value* drift, which is `spec-drift`'s job) — and, *when* a `passed` criterion cites a test file via `verified_by`, requires that file to exist (opt-in, existence-only — it doesn't make evidence mandatory).
+- **The deterministic spine is a *verifiable property*** — the no-model invariant is enforced by a guard that bans all network egress, not just LLM SDKs.
+- **The adversarial verifier outranks the generator** — on a CRITICAL gate the judging model tier is pinned ≥ the generator's and never downgrades; `G_REVIEW_BLOCK` (not the agent) decides.
+- **Spec↔build divergence is a first-class, typed loop** (`spin spec-drift`) — a green build can't silently leave a false spec behind once the correction is disclosed.
+
+> **Honest limit (on the record):** gates certify *structure and identity, not truth*. The spine can prove a file exists, a criterion is `passed`, a verifier is cited, the criteria sets are consistent — it **cannot** prove a CRC value is correct or that a non-executable prose claim is true. Spindle makes confidence *checkable*; it does not make meaning self-verifying. See [`docs/DOGFOOD_LOG_pix-brcode.md`](docs/DOGFOOD_LOG_pix-brcode.md) for where exactly that line falls.
+
 ---
 
 ## The hard-seam doctrine
@@ -93,8 +106,8 @@ Gates are run via `spin gate <id>`. A command that receives exit 1 surfaces `{ga
 |---|---|---|
 | `G_DEFINE` | `/design` | DEFINE sections present, AC-n IDs valid, define handoff valid |
 | `G_DESIGN` | `/build` | Manifest table present, design handoff valid |
-| `G_BUILD` | `/ship` | Every manifest file exists on disk, `diff-criteria` empty, BUILD_REPORT present |
-| `G_SHIP` | publish | DEFINE criteria minus build.passed must be empty |
+| `G_BUILD` | `/ship` | Every manifest file exists on disk; every DEFINE criterion `passed`; **no phantom criterion** (a `passed` AC-n DEFINE never declared → set-drift); a cited `verified_by` file must exist; BUILD_REPORT present |
+| `G_SHIP` | publish | DEFINE criteria minus build.passed must be empty; no phantom criterion; surfaces `spec-drift` |
 | `G_KB_STRUCTURE` | KB publish | KB structure checks |
 | `G_KB_COVERAGE` | KB publish | KB coverage checks |
 | `G_ROUTER_COVERAGE` | router validate | Agent→routing bijection, no silent skips |
@@ -250,11 +263,11 @@ After editing, run `spin schema validate` before running any workflow command. T
 
 ## Test and CI story
 
-The harness ships with **93 unit, integration, and end-to-end tests** (run `npm test`) covering:
+The harness ships with **222 unit, integration, and end-to-end tests** (run `npm test`) covering:
 
 - Kahn ordering correctness under all dependency topologies
-- Gate pass/block logic for every gate ID
-- Handoff schema validation for all 9 schema IDs
+- Gate pass/block logic for every gate ID (incl. phantom-criterion + evidence checks)
+- Handoff schema validation for all 10 schema IDs
 - Exit-code ABI conformance
 - **No-model-calls guard** — the test suite asserts that no `spin` code path imports or invokes an inference SDK. This is enforced as a hard test failure, not a lint warning.
 - E2E: a full `sdd` cycle from `spin init` through `spin gate G_SHIP`, using fixture artifacts and handoffs, verifying that every `spin complete` and gate transition produces the correct `run.json` state.
@@ -275,6 +288,28 @@ Add to your pipeline:
 ```
 
 No model credentials needed — all tests are deterministic. The no-model-calls guard will catch any accidental inference import introduced in a future change.
+
+---
+
+## Proven on itself — the dogfood
+
+Spindle was driven on itself, twice, against a *real* PIX BR Code library (a TS lib that
+generates + parses a static PIX copia-e-cola: EMV TLV + CRC16-CCITT). Each phase agent
+drove `spin`, parked at the gate, and was *forbidden* from faking a pass (no `--force`, no
+hand-edited `run.json`) — honesty enforced mechanically, not by good behavior.
+
+- **Run #1** — the harness held end-to-end (4 honest gates; the library independently
+  re-verified by the observer, not trusted from the agent's word). It also produced a *true
+  positive against the harness itself*: `G_DEFINE` passed a **factually-wrong** acceptance
+  criterion (a CRC value that didn't match the standard), because gates check structure, not
+  truth. The build caught it (the criterion was executable) but left the spec false while
+  every gate stayed green — a silent spec↔build drift. → fixed with the `corrected_spec` /
+  `spin spec-drift` mechanism.
+- **Run #2** — the fixes worked (zero source-diving, a real drift flagged + reconciled, not
+  shipped silently) and surfaced two more gaps *in the fixes themselves* — both then fixed.
+
+The loop did its job twice: it proved the harness holds, then caught the holes in its own
+repair. Full write-up: [`docs/DOGFOOD_LOG_pix-brcode.md`](docs/DOGFOOD_LOG_pix-brcode.md).
 
 ---
 

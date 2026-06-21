@@ -67,6 +67,8 @@ export const GATE_DOCS: Record<string, GateDoc> = {
       'BUILD_REPORT.md missing',
       'a file from the design manifest was not built',
       'an acceptance criterion from DEFINE is not marked passed in the build results',
+      'the build certifies a criterion DEFINE never declared (phantom/set-drift)',
+      'a passed criterion cites a verified_by file (path) that does not exist on disk',
     ],
     flags: [],
   },
@@ -75,7 +77,10 @@ export const GATE_DOCS: Record<string, GateDoc> = {
     purpose: 'Final certification inside /ship: define.criteria minus build.passed must be empty.',
     reads: ['.handoffs/define.json (criteria)', '.handoffs/build.json (results, incl. corrected_spec flags)'],
     handoff: 'build-report',
-    blocks_when: ['any acceptance criterion in DEFINE is not satisfied by the build results'],
+    blocks_when: [
+      'any acceptance criterion in DEFINE is not satisfied by the build results',
+      'the build certifies a criterion DEFINE never declared (phantom/set-drift)',
+    ],
     flags: [],
   },
   G_KB_STRUCTURE: {

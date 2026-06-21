@@ -43,6 +43,13 @@ describe('handoff contracts', () => {
       results: [{ criterion: 'AC-1', status: 'passed', corrected_spec: true, reconciled: true }],
     });
     expect(reconciled.ok).toBe(true);
+
+    // verified_by evidence is accepted
+    const evidence = checkHandoffObject('build-report', {
+      feature: 'auth',
+      results: [{ criterion: 'AC-1', status: 'passed', verified_by: 'test/a.test.ts' }],
+    });
+    expect(evidence.ok).toBe(true);
   });
 
   it('accepts a valid design handoff with a manifest', () => {

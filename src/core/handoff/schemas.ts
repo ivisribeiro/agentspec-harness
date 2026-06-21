@@ -60,6 +60,10 @@ export const BuildReportHandoff = z.object({
         // run #2, G2). `spin spec-drift` ignores a reconciled correction, so the
         // ship loop converges instead of exiting 1 forever after the fix.
         reconciled: z.boolean().default(false),
+        // Optional evidence for a `passed` status: the test file / check that
+        // substantiates it. When it looks like a path, G_BUILD requires the file
+        // to exist — so "passed" can carry proof, not just a bare assertion.
+        verified_by: z.string().optional(),
       })
     )
     .default([]),
