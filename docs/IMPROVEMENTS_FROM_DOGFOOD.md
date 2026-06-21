@@ -86,8 +86,15 @@ ruff fora do lockfile; E2E infra-bound conflado com unit.
 no audit (unit-sempre-passa vs infra-bound); (c) `spin config-drift` determinístico que flaga
 "tool no CI mas não no lockfile" e "env var do CI != expectativa do conftest" (set-diffs puros).
 
-### I10 — Checklist de omissão no adversário (regressão/idempotência/concorrência)
-**Problema:** a contribuição mais forte do adversário foram 5 tasks omitidas que só apareceram
+### I10 — Checklist de omissão no adversário (regressão/idempotência/concorrência) — ✅ IMPLEMENTADO 2026-06-21
+**Implementação:** seção "The omission checklist" na skill `adversarial-gate` — todo
+crítico, além de refutar o que está escrito, responde um checklist fixo pra cada claim
+marcada "done/resolved/safe": tem teste de regressão? idempotente em N runs? safe sob
+concorrência? sobrevive redeploy? inerte-por-config (codado mas não enforced em prod)?
+Item não-respondido vira finding/proposedTask. (A parte `invariants_at_risk` no
+AuditHandoff fica pendente até I1 existir.)
+
+**Problema (original):** a contribuição mais forte do adversário foram 5 tasks omitidas que só apareceram
 ao perguntar "o que quebra sob N runs / concorrência / redeploy?".
 **Proposta:** encodar um omission-checklist fixo na skill `adversarial-gate` que o adversário
 responde pra cada bug "resolvido" que a auditoria cita (tem teste de regressão? idempotente em

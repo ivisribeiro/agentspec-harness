@@ -112,6 +112,33 @@ the surviving CRITICAL `reasons`/`unmet` and the exhausted round count, and hand
 the decision back to the human. A blocked-at-ceiling artifact never silently
 proceeds.
 
+## The omission checklist (hunt what's MISSING, not just defects in what's there)
+
+A critic that only refutes what is *written* misses the most expensive class of
+flaw: the task or test that should exist and does not. The adversary's strongest
+real contribution on a live plan was five **omitted** tasks — found only by asking
+"what breaks under repetition / concurrency / redeploy?". So every critic, in
+addition to refuting the artifact, MUST answer this fixed checklist for each claim
+the artifact marks "done", "resolved", or "safe":
+
+- **Regression** — is there a test that PINS this fix? A bug fixed without a test
+  reopens on the next refactor. (Emit a `finding` if the fix has no regression test.)
+- **Idempotency** — does it stay correct across N repeated runs? (Schedulers,
+  retries, replays. A "full reload" that appends instead of replacing silently
+  corrupts data across cron runs.)
+- **Concurrency** — is it safe under concurrent execution? (A path that was
+  "flaky" once is a concurrency bug that a single retry hid.)
+- **Redeploy / restart** — does it survive a process restart or container
+  recreate? (Connection leaks, in-memory state, orphaned resources.)
+- **Inert-by-config** — is the capability actually ENFORCED in prod, or merely
+  coded? (A flag whose code default is unsafe and whose prod override was never
+  verified is a live hole no static review catches.)
+
+Unanswered items become `finding`s (or, in an audit context, `proposedTasks`).
+Track the invariants explicitly — isolation, idempotency, concurrency-safety —
+so "acknowledged in a comment but no test asserts it" becomes a typed, plannable
+item rather than buried prose.
+
 ## Anti-patterns
 
 - **Shared-context critics** — reusing one chat or piping critic A's output into
