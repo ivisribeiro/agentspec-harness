@@ -1,0 +1,47 @@
+{
+  "name": "agentspec-harness",
+  "version": "0.1.0",
+  "description": "AgentSpec made harness-native: a deterministic, testable orchestration spine (ahx CLI) for spec-driven data engineering in Claude Code.",
+  "type": "module",
+  "bin": {
+    "ahx": "./bin/ahx.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "schemas",
+    "plugin"
+  ],
+  "scripts": {
+    "build": "node build.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "guard": "node scripts/guard-no-model-calls.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "fast-glob": "^3.3.2",
+    "yaml": "^2.5.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@vitest/coverage-v8": "^2.1.2",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.2"
+  },
+  "keywords": [
+    "claude-code",
+    "harness",
+    "spec-driven-development",
+    "data-engineering",
+    "agent-orchestration"
+  ],
+  "license": "MIT",
+  "author": "Ivis Ribeiro",
+  "repository": "https://github.com/ivisribeiro/agentspec-harness"
+}

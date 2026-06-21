@@ -1,0 +1,967 @@
+{
+  "decision": "Resolve A-vs-B as a HARD-SEAM HYBRID, not a blend. The \"ahx\" CLI is a real TypeScript/Node executable (npx-installable, esbuild-bundled, vitest-tested, commander-based \u2014 mirroring OpenSpec's exact ship mechanics) that is the deterministic state machine and gatekeeper, and it NEVER calls a model. The plugin's slash commands are the only model-execution layer; they call ahx for every ordering, validation, gate, and state decision and branch strictly on exit code, and they fan out worker subagents via the Task tool. Pure-B (better markdown) is rejected because \"tested end-to-end\" is impossible against prose: you cannot write a vitest assertion that an LLM ordered files by dependency or honored a checkbox \u2014 and AgentSpec's current build.md proves the failure mode (topo-ordering as \"Step 3\" reasoning, \"max 3\" retry as prose line 199, a self-marked checkbox gate at lines 206-216). Pure-A (CLI runs the agents) is rejected harder because end users of a Claude Code plugin have no SDK key, no dispatch endpoint, and no Workflow runtime; any node code that \"runs the agent\" is either the fake api.anthropic.com/dispatch fantasy from ECC's autonomous-agent-harness or a non-deterministic `claude -p` shell-out that breaks testability and the plugin sandbox. The seam is the whole design: deterministic concerns (Kahn topo-order over schema.yaml, structural validation, named gates, run-state) live in ahx with an exit-code ABI (0 pass / 1 gate-blocked / 2 usage / 3 internal); authoring concerns (specs, code, analysis) live in commands via Task; and schemas/ is the shared editable workflow definition consumed by both. Every arrow in the command protocol (ahx next -> Task fan-out -> ahx complete --handoff -> ahx gate) is a CLI call a test can assert.",
+  "rationale": "All three proposals converge on the hybrid and all three correctly reject the ECC fake-dispatch anti-pattern, so the decision is not in doubt \u2014 the differentiation is in the keystones that make it actually testable and crash-safe. Proposal 1 (Opus) is the strongest: it alone identifies the two load-bearing mechanisms the baseline left soft \u2014 (a) a CLI-WRITTEN run-state ledger (ahx.run.json) so gates read filesystem+state, never conversation memory, making them idempotent and re-runnable after a mid-session plugin crash (this is OpenSpec's detectCompleted file-existence insight extended to gates), and (b) `ahx complete <id> --handoff out.json` as the single point where worker output is validated against a Zod handoff schema BEFORE the artifact counts done. Proposals 2 and 3 both name the handoff JSON contract but neither makes the CLI the enforcer at a specific command boundary, and neither makes run-state crash-safe \u2014 both lean on `ahx state complete` as an LLM-invoked mutation with no validation gate in between, which reopens the exact \"LLM self-marks done\" hole they set out to close. Proposal 3 contributes the decisive fidelity constraint the other two underweight: AgentSpec's real value is 58 agents + 24 KB domains + deep DE surface (verified by Bash: 58/24/31), and the harness must preserve that roster intact while hardening control flow \u2014 a thinner harness that loses the domain depth is a net loss. Proposal 3 also correctly separates the human-facing markdown artifact (DEFINE.md) from the machine-facing handoff sidecar (.ahx/handoffs/define.json) the gate evaluates, which removes the brittleness of regex-scraping markdown for a clarity score. The locked design therefore takes Proposal 1's run-state+gate-ABI+complete--handoff keystone, Proposal 3's preserve-the-roster + sidecar-handoff discipline, and Proposal 2's progressive-adoption ergonomics (commands detect .ahx/ and degrade gracefully), while porting OpenSpec's graph.ts/schema.ts/types.ts/state.ts verbatim (confirmed clean, MIT, Zod-validated, cycle-detecting) and adding parallel_group + handoff + gates fields the SDD workflow needs.",
+  "repoName": "agentspec-harness",
+  "cliBin": "ahx",
+  "fileTree": [
+    {
+      "path": "package.json",
+      "purpose": "npm manifest. bin:{ahx:./bin/ahx.js}, type:module, scripts {build:node build.js, test:vitest run, test:coverage}, deps: commander+yaml+zod, devDeps: vitest+esbuild+typescript. Mirrors OpenSpec package.json (verified deps/scripts).",
+      "buildModel": "haiku",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "tsconfig.json",
+      "purpose": "TS config: module nodenext, strict, target es2022, outDir dist.",
+      "buildModel": "haiku",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "vitest.config.ts",
+      "purpose": "vitest config: test/**, coverage thresholds 80% on src/core.",
+      "buildModel": "haiku",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "build.js",
+      "purpose": "esbuild bundle src->dist/cli/index.js (ESM). Ported from OpenSpec build.js.",
+      "buildModel": "haiku",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "LICENSE",
+      "purpose": "MIT license text.",
+      "buildModel": "haiku",
+      "portsFrom": "new"
+    },
+    {
+      "path": "README.md",
+      "purpose": "Install (npx/node), the seam doctrine, command surface, how to fork schema.yaml.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "CLAUDE.md",
+      "purpose": "Contributor doctrine. INVARIANT: ahx never calls a model; no fetch/anthropic/claude -p in src/. Documents the hard seam.",
+      "buildModel": "opus",
+      "portsFrom": "new"
+    },
+    {
+      "path": "bin/ahx.js",
+      "purpose": "#!/usr/bin/env node shebang -> import {runCli} from ../dist/cli/index.js. Verbatim OpenSpec bin pattern.",
+      "buildModel": "haiku",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/cli/index.ts",
+      "purpose": "commander root registering all ahx subcommands; maps Result objects to exit-code ABI (0/1/2/3); prints JSON to stdout.",
+      "buildModel": "main-loop",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/core/artifact-graph/graph.ts",
+      "purpose": "PORTED VERBATIM: ArtifactGraph class, Kahn getBuildOrder/getNextArtifacts/getBlocked/isComplete. Deterministic sort.",
+      "buildModel": "main-loop",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/core/artifact-graph/types.ts",
+      "purpose": "PORTED+EXT: Zod ArtifactSchema extended with optional model, handoff, parallel_group, validate, optional fields; SchemaYaml; CompletedSet; BlockedArtifacts.",
+      "buildModel": "main-loop",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/core/artifact-graph/schema.ts",
+      "purpose": "PORTED VERBATIM: loadSchema/parseSchema, validateNoDuplicateIds/validateRequiresReferences/validateNoCycles (DFS cycle path).",
+      "buildModel": "main-loop",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/core/artifact-graph/state.ts",
+      "purpose": "PORTED+EXT: detectCompleted via file-existence over generates path; extended to also union the CLI-written run-state completed set (crash-safe dual source).",
+      "buildModel": "main-loop",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/core/artifact-graph/outputs.ts",
+      "purpose": "PORTED: artifactOutputExists (path/glob existence check) supporting detectCompleted.",
+      "buildModel": "haiku",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/core/run/run-state.ts",
+      "purpose": "NEW KEYSTONE: atomic read/write of .ahx/run.json (current schema, feature, completed set, retry counters, gate ledger). CLI-written only, never LLM-written.",
+      "buildModel": "main-loop",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/core/run/run-state.schema.ts",
+      "purpose": "NEW: Zod RunState schema validating .ahx/run.json on every read.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/core/gates/registry.ts",
+      "purpose": "NEW: gate id -> GateFn(ctx:RunContext)=>GateResult map. RunContext = {runDir, runState, graph, readFile} \u2014 filesystem+state only.",
+      "buildModel": "main-loop",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/core/gates/gate-runner.ts",
+      "purpose": "NEW: runGate(id)->GateResult; maps passed=false to exit 1 with JSON {gate,passed,reasons,unmet}.",
+      "buildModel": "main-loop",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/core/gates/sdd-gates.ts",
+      "purpose": "OPUS-CRITICAL: G_DEFINE/G_DESIGN/G_BUILD/G_SHIP. G_BUILD does real file-existence over manifest + criteria set-diff, replacing build.md prose checkbox. G_SHIP is define.criteria minus build.passed must be empty.",
+      "buildModel": "opus",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/core/gates/kb-gates.ts",
+      "purpose": "NEW: G_KB_STRUCTURE (manifest/index/quick-reference/>=1 concept exist), G_KB_COVERAGE (every manifest concept present as file + >=N test-cases). Replaces create-kb blind delegation.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/core/gates/router-gate.ts",
+      "purpose": "OPUS-CRITICAL: G_ROUTER_COVERAGE asserts bijection \u2014 every agent frontmatter parsed (Zod), each appears exactly once in routing output, no silent skips (fixes Python router [WARN] Skipping path).",
+      "buildModel": "opus",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "src/core/gates/review-gate.ts",
+      "purpose": "OPUS-CRITICAL: G_REVIEW_BLOCK counts surviving CRITICAL findings after adversarial pass over validated Finding[]; shared by /review and /migrate. Security-critical.",
+      "buildModel": "opus",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/core/validation/md-section-validator.ts",
+      "purpose": "NEW: assert required ## sections exist and are non-empty in a markdown artifact.",
+      "buildModel": "sonnet",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/core/validation/frontmatter.ts",
+      "purpose": "NEW: parse+Zod-validate agent/skill frontmatter; replaces fragile regex parse in generate-agent-router.py; fail-closed, no silent skip.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "src/core/validation/criteria-diff.ts",
+      "purpose": "OPUS-CRITICAL: pure set-diff of DEFINE acceptance-criteria IDs vs BUILD results with status=passed; returns unmet[]. Backbone of G_SHIP.",
+      "buildModel": "opus",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/core/handoff/schemas.ts",
+      "purpose": "NEW: Zod for every worker output contract (Define/Design/BuildTask/Finding/Claim/MigrationPlan/AdversaryReport/KBConcept/ClaudeMdSection/AgentFrontmatter).",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/core/handoff/handoff-check.ts",
+      "purpose": "NEW: validate a worker-output JSON file against a named handoff schema; used by ahx complete --handoff and ahx handoff-check.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/core/model-route/policy.ts",
+      "purpose": "NEW: pure resolver taskKind+budget -> {tier,model,reason}. Critical kinds (adversary/architect/review-judge) never resolve below their floor; downgrades allowed only where a gate backstops output.",
+      "buildModel": "opus",
+      "portsFrom": "ecc"
+    },
+    {
+      "path": "src/core/model-route/policy.schema.ts",
+      "purpose": "NEW: Zod types for routing policy + override block.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/core/index.ts",
+      "purpose": "public exports for tests and reuse.",
+      "buildModel": "haiku",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/commands/init.ts",
+      "purpose": "ahx init [--schema sdd|kb]: scaffold .ahx/ run dir + copy editable schema; create run.json.",
+      "buildModel": "sonnet",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/commands/next.ts",
+      "purpose": "ahx next: ArtifactGraph.getNextArtifacts(completed) -> {ready[],blocked{}} + model hint per ready artifact.",
+      "buildModel": "sonnet",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/commands/state-cmd.ts",
+      "purpose": "ahx state (print run.json) and ahx complete <id> [--handoff f]: validate handoff first, then mark complete in run.json. exit 1 if handoff invalid.",
+      "buildModel": "main-loop",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/commands/validate-cmd.ts",
+      "purpose": "ahx validate <id|path>: structural validation (md sections / frontmatter / manifest table). exit 0/1 + JSON issues.",
+      "buildModel": "sonnet",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "src/commands/gate-cmd.ts",
+      "purpose": "ahx gate <gate-id>: run named gate, exit 0 pass / 1 block.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/commands/route-cmd.ts",
+      "purpose": "ahx route <task-kind> [--budget]: print {tier,model,reason}.",
+      "buildModel": "haiku",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/commands/diff-criteria-cmd.ts",
+      "purpose": "ahx diff-criteria --define f --build f: print unmet[].",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "src/commands/schema-cmd.ts",
+      "purpose": "ahx schema show|validate: inspect/Zod-validate the editable workflow schema.",
+      "buildModel": "haiku",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "schemas/sdd/schema.yaml",
+      "purpose": "EDITABLE: 5 SDD artifacts (brainstorm optional->define->design->build->ship) with requires, template, model, handoff, validate, parallel_group; config.build_retry_cap; gates map. Encodes WORKFLOW_CONTRACTS.yaml as data.",
+      "buildModel": "opus",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "schemas/sdd/templates/brainstorm.md",
+      "purpose": "Brainstorm artifact template (ported from BRAINSTORM_TEMPLATE.md).",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "schemas/sdd/templates/define.md",
+      "purpose": "Define template w/ required sections + AC-n criteria IDs (ported from DEFINE_TEMPLATE.md).",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "schemas/sdd/templates/design.md",
+      "purpose": "Design template w/ file-manifest table (ported from DESIGN_TEMPLATE.md).",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "schemas/sdd/templates/build-report.md",
+      "purpose": "Build report template w/ results table keyed by AC IDs (ported from BUILD_REPORT_TEMPLATE.md).",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "schemas/sdd/templates/shipped.md",
+      "purpose": "Shipped/archive template (ported from SHIPPED_TEMPLATE.md).",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "schemas/kb/schema.yaml",
+      "purpose": "EDITABLE: KB artifact graph manifest->[concepts(parallel_group),patterns,test-cases]->quick-reference->index, with handoff+gates.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "schemas/kb/templates/concept.md",
+      "purpose": "KB concept template.",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "schemas/kb/templates/index.md",
+      "purpose": "KB domain index template.",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "schemas/kb/templates/quick-reference.md",
+      "purpose": "KB quick-reference template.",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "schemas/handoffs/define.handoff.json",
+      "purpose": "JSON Schema for define worker output (clarity, AC IDs).",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "schemas/handoffs/design.handoff.json",
+      "purpose": "JSON Schema for design worker output (file manifest, decisions).",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "schemas/handoffs/build-task.handoff.json",
+      "purpose": "JSON Schema for build worker output (file, verification_passed, retry_count, issues).",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "schemas/handoffs/finding.handoff.json",
+      "purpose": "JSON Schema shared by /review,/migrate,/sql-review (file,line,severity,rule,source).",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "schemas/handoffs/claim.handoff.json",
+      "purpose": "JSON Schema for /fact-check claim + verification result.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "schemas/handoffs/migration-plan.handoff.json",
+      "purpose": "JSON Schema for /migrate competing plans (engine,steps,risks,rollback).",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "schemas/handoffs/claudemd-section.handoff.json",
+      "purpose": "JSON Schema for /sync-context section workers (preserve/replace/merge).",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "schemas/handoffs/kb-concept.handoff.json",
+      "purpose": "JSON Schema for KB concept worker output.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "plugin/.claude-plugin/plugin.json",
+      "purpose": "Plugin manifest: name agentspec-harness, MIT, points commands/agents/skills/hooks; documents ahx invocation via node ${CLAUDE_PLUGIN_ROOT}/dist.",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/.claude-plugin/marketplace.json",
+      "purpose": "Marketplace entry (ported/updated from AgentSpec).",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/workflow/brainstorm.md",
+      "purpose": "Phase 0 command: ahx next -> brainstorm worker (opus) -> ahx complete. Optional, no blocking gate.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/workflow/define.md",
+      "purpose": "Phase 1: ahx next -> define worker (opus) -> ahx complete --handoff -> ahx gate G_DEFINE.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/workflow/design.md",
+      "purpose": "Phase 2: ahx gate G_DEFINE first -> design worker (opus) -> ahx complete --handoff -> ahx gate G_DESIGN.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/workflow/build.md",
+      "purpose": "Phase 3 REWRITE: fan out build workers by parallel_group via Task; bounded-loop capped by config.build_retry_cap (counter in run-state, not prose); ahx gate G_BUILD (file-existence + criteria diff) replaces the checkbox. Keeps --judge passthrough to judge.py.",
+      "buildModel": "opus",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/workflow/ship.md",
+      "purpose": "Phase 4 REWRITE: ahx diff-criteria + ahx gate G_SHIP blocks on unmet criteria in code; haiku ship worker writes archive prose only.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/workflow/iterate.md",
+      "purpose": "Cross-phase iterate (ported; marks downstream artifacts incomplete in run-state to force re-gate).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/workflow/create-pr.md",
+      "purpose": "PR creation (ported from AgentSpec, lightly harness-aware).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/knowledge/create-kb.md",
+      "purpose": "REWRITE: drives schemas/kb via ahx next waves; kb concept workers (sonnet) parallel; ahx gate G_KB_STRUCTURE/G_KB_COVERAGE. Replaces 3-line blind delegation.",
+      "buildModel": "opus",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/review/review.md",
+      "purpose": "REWRITE: parallel arch+security+CodeRabbit workers returning Finding[]; ahx dedups in code; opus challenger on CRITICAL; G_REVIEW_BLOCK gates.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/review/judge.md",
+      "purpose": "Cross-model judge command (ported; calls scripts/judge.py).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/data-engineering/migrate.md",
+      "purpose": "REWRITE: parallel dbt+spark plan workers (independent contexts); independent equivalence worker; opus adversary; G_REVIEW_BLOCK on CRITICAL.",
+      "buildModel": "opus",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/data-engineering/sql-review.md",
+      "purpose": "SQL review (ported; uses finding.handoff + G_REVIEW_BLOCK).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/data-engineering/pipeline.md",
+      "purpose": "Pipeline scaffolding command (ported intact, delegates to pipeline-architect).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/data-engineering/schema.md",
+      "purpose": "Schema design command (ported intact).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/data-engineering/data-quality.md",
+      "purpose": "Data quality command (ported intact).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/data-engineering/data-contract.md",
+      "purpose": "Data contract command (ported intact).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/data-engineering/lakehouse.md",
+      "purpose": "Lakehouse command (ported intact).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/data-engineering/ai-pipeline.md",
+      "purpose": "AI/RAG pipeline command (ported intact).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/visual-explainer/fact-check.md",
+      "purpose": "REWRITE: haiku extract worker -> Claim[]; parallel verify workers per claim; parallel correction pass. ahx validates+sequences only.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/core/sync-context.md",
+      "purpose": "REWRITE: 5 parallel section workers (haiku) -> ClaudeMdSection handoffs; deterministic merge honoring preserve/replace/merge (not LLM free-merge).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/core/gen-router.md",
+      "purpose": "NEW command: parse all agent frontmatter (Zod via ahx), G_ROUTER_COVERAGE bijection, then write routing.json. Replaces blind Python script.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/core/status.md",
+      "purpose": "Status command (ported; reads ahx state).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/core/memory.md",
+      "purpose": "Memory command (ported intact).",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/core/meeting.md",
+      "purpose": "Meeting analysis command (ported intact).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/commands/core/readme-maker.md",
+      "purpose": "README maker command (ported intact).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/agents/workflow/define-worker.md",
+      "purpose": "Define worker agent w/ typed output contract (writes DEFINE.md + define handoff sidecar). model:opus.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/agents/workflow/design-worker.md",
+      "purpose": "Design worker w/ typed output contract. model:opus.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/agents/workflow/build-worker.md",
+      "purpose": "Build worker (per manifest file) w/ verification + retry_count contract. model:sonnet.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/agents/workflow/ship-worker.md",
+      "purpose": "Ship/archive worker. model:haiku.",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/agents/_adversary/challenger.md",
+      "purpose": "OPUS adversarial role, read-only tools, typed {verdict,critical_issues[]} contract, never shares context with generator. Shared by review/migrate/design-strict.",
+      "buildModel": "opus",
+      "portsFrom": "ecc"
+    },
+    {
+      "path": "plugin/agents/review/security-worker.md",
+      "purpose": "Security review worker -> Finding[]. model:sonnet.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/agents/review/arch-worker.md",
+      "purpose": "Architecture review worker -> Finding[]. model:sonnet.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/agents/migrate/dbt-worker.md",
+      "purpose": "dbt migration plan worker -> MigrationPlan. model:sonnet.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/agents/migrate/spark-worker.md",
+      "purpose": "Spark migration plan worker -> MigrationPlan. model:sonnet.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/agents/migrate/equivalence-worker.md",
+      "purpose": "Independent equivalence checker (separate context from plan authors). model:sonnet.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "plugin/agents/factcheck/extract-worker.md",
+      "purpose": "Claim extraction worker (mechanical). model:haiku.",
+      "buildModel": "haiku",
+      "portsFrom": "new"
+    },
+    {
+      "path": "plugin/agents/factcheck/verify-worker.md",
+      "purpose": "Per-claim verification worker. model:sonnet.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "plugin/agents/kb/concept-worker.md",
+      "purpose": "KB concept authoring worker -> KBConcept handoff. model:sonnet.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/agents/_roster_de/PORT.md",
+      "purpose": "Port-marker doc: the 50 remaining AgentSpec specialist agents (data-engineering, cloud, platform, python, test, dev, architect) copied intact with an added output_schema frontmatter field; preserves 58-agent roster.",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/skills/harness-protocol/SKILL.md",
+      "purpose": "ARCHITECTURE-DEFINING: the ahx-call protocol every command obeys (next->Task->complete--handoff->gate, branch on exit code, sidecar handoff vs human markdown).",
+      "buildModel": "opus",
+      "portsFrom": "new"
+    },
+    {
+      "path": "plugin/skills/model-routing/SKILL.md",
+      "purpose": "ARCHITECTURE-DEFINING: routing doctrine; verifier outranks generator on critical gates; downgrade only behind a gate.",
+      "buildModel": "opus",
+      "portsFrom": "ecc"
+    },
+    {
+      "path": "plugin/skills/parallel-fanout/SKILL.md",
+      "purpose": "Ported from ECC parallel-execution-optimizer: lane matrix, single-message Task fan-out, typed handoffs, failure isolation.",
+      "buildModel": "sonnet",
+      "portsFrom": "ecc"
+    },
+    {
+      "path": "plugin/skills/adversarial-gate/SKILL.md",
+      "purpose": "ARCHITECTURE-DEFINING: ported from ECC gan-style-harness + council; anti-anchoring independent critics, typed verdict, hard cap.",
+      "buildModel": "opus",
+      "portsFrom": "ecc"
+    },
+    {
+      "path": "plugin/skills/bounded-loop/SKILL.md",
+      "purpose": "Ported from ECC autonomous-loops: typed+capped retry via ahx retry counters; NO claude -p / dispatch (explicitly corrects the bad ECC skill).",
+      "buildModel": "opus",
+      "portsFrom": "ecc"
+    },
+    {
+      "path": "plugin/skills/agent-router/routing.json",
+      "purpose": "Generated routing table for all 58 agents (output of gen-router, validated by G_ROUTER_COVERAGE).",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/skills/data-engineering-guide/SKILL.md",
+      "purpose": "DE expertise skill (ported intact \u2014 core domain value).",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/kb/PORT.md",
+      "purpose": "Port-marker doc: all 24 KB domains copied intact (medallion, dbt, lakehouse, terraform, python, etc.) with _index.yaml + _templates.",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/hooks/hooks.json",
+      "purpose": "SessionStart hook: ensure dist/ built (node build.js if missing) + ahx init scaffolding; ported from AgentSpec init-workspace pattern.",
+      "buildModel": "sonnet",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "plugin/scripts/judge.py",
+      "purpose": "Cross-model judge (ported intact \u2014 already exit-code-based, used by build/judge commands).",
+      "buildModel": "haiku",
+      "portsFrom": "agentspec"
+    },
+    {
+      "path": "test/core/artifact-graph/graph.test.ts",
+      "purpose": "Ported+extended unit tests: Kahn order, getNextArtifacts, getBlocked, cycle detection, deterministic sort.",
+      "buildModel": "main-loop",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "test/core/gates/sdd-gates.test.ts",
+      "purpose": "Each SDD gate: pass + fail + idempotent re-run (run twice from same files -> identical result, proves crash-safety).",
+      "buildModel": "main-loop",
+      "portsFrom": "new"
+    },
+    {
+      "path": "test/core/gates/router-gate.test.ts",
+      "purpose": "G_ROUTER_COVERAGE: duplicate agent -> exit 1; malformed frontmatter -> exit 1; clean roster -> exit 0.",
+      "buildModel": "main-loop",
+      "portsFrom": "new"
+    },
+    {
+      "path": "test/core/run/run-state.test.ts",
+      "purpose": "Atomic write/read, schema validation, retry counter increment/ceiling.",
+      "buildModel": "main-loop",
+      "portsFrom": "new"
+    },
+    {
+      "path": "test/core/validation/criteria-diff.test.ts",
+      "purpose": "DEFINE criteria vs BUILD results set-diff: met/unmet sets.",
+      "buildModel": "main-loop",
+      "portsFrom": "new"
+    },
+    {
+      "path": "test/core/model-route/policy.test.ts",
+      "purpose": "Each task-kind -> tier; critical kinds never below floor; budget downgrades only where gated.",
+      "buildModel": "main-loop",
+      "portsFrom": "new"
+    },
+    {
+      "path": "test/core/handoff/schemas.test.ts",
+      "purpose": "Accept/reject fixtures for each handoff Zod schema.",
+      "buildModel": "main-loop",
+      "portsFrom": "new"
+    },
+    {
+      "path": "test/cli/cli.test.ts",
+      "purpose": "Spawn node bin/ahx.js subprocess against temp dir; assert exit codes + stdout JSON (gate ABI under test). Mirrors OpenSpec cli-e2e.",
+      "buildModel": "main-loop",
+      "portsFrom": "openspec"
+    },
+    {
+      "path": "test/e2e/fixtures/sample-feature/",
+      "purpose": "Fixture artifact files a worker would write, including one deliberately-broken (missing manifest file) to assert the gate BLOCKS.",
+      "buildModel": "sonnet",
+      "portsFrom": "new"
+    },
+    {
+      "path": "test/e2e/sdd-cycle.e2e.test.ts",
+      "purpose": "THE DELIVERABLE TEST: drives full 5-phase cycle through the CLI; asserts G_BUILD exit 1 on missing file then exit 0 after fix; final state phase=ship complete=all.",
+      "buildModel": "main-loop",
+      "portsFrom": "new"
+    },
+    {
+      "path": "test/e2e/kb-cycle.e2e.test.ts",
+      "purpose": "KB graph cycle through CLI: G_KB_COVERAGE blocks until every manifest concept exists.",
+      "buildModel": "main-loop",
+      "portsFrom": "new"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "purpose": "CI: node build.js + vitest run on push; coverage gate 80% on src/core.",
+      "buildModel": "haiku",
+      "portsFrom": "openspec"
+    }
+  ],
+  "schemaFormat": "Ported verbatim from OpenSpec's schemas/*/schema.yaml + templates/*.md pattern (confirmed: name, version, description, artifacts[] with id/generates/description/template/instruction?/requires[], plus optional apply phase; loaded+Zod-validated by schema.ts with duplicate-id, dangling-requires, and DFS cycle checks). Extended with FOUR fields the SDD workflow needs that OpenSpec lacks: (1) model: per-artifact authoring tier hint (opus/sonnet/haiku) consumed by the command and surfaced by `ahx next`; (2) handoff: path to schemas/handoffs/<id>.json \u2014 the typed worker-output contract that `ahx complete --handoff` enforces in code BEFORE the artifact counts done; (3) validate: declarative structural checks (md_sections list, criteria_ids prefix, manifest_table bool) run by `ahx validate`; (4) parallel_group: marks an artifact whose workers fan out as a wave (e.g. build by manifest layer, KB concepts) \u2014 this finally EXECUTES OpenSpec's getNextArtifacts wave instead of only displaying it. Plus a top-level config block (e.g. build_retry_cap:3 \u2014 caps as DATA not prose) and a gates map (before_design:G_DEFINE, before_build:G_DESIGN, before_ship:[G_BUILD,G_SHIP]). Same engine drives schemas/sdd and schemas/kb, so KB creation is just another artifact graph. Editing a workflow = editing one YAML + its templates; `ahx schema validate` Zod-checks it. Example sdd artifact: {id:build, generates:.ahx/features/{feature}/BUILD_REPORT.md, template:build-report.md, model:sonnet, parallel_group:by_manifest_layer, handoff:handoffs/build-task.handoff.json, requires:[design]}.",
+  "cliCommands": [
+    {
+      "cmd": "ahx init [--schema sdd|kb]",
+      "purpose": "Scaffold .ahx/ run dir, copy editable schema, create run.json.",
+      "deterministic": true
+    },
+    {
+      "cmd": "ahx state",
+      "purpose": "Print .ahx/run.json (current schema, feature, completed set, retry counters, gate ledger).",
+      "deterministic": true
+    },
+    {
+      "cmd": "ahx next [--json]",
+      "purpose": "getNextArtifacts(completed) -> {ready[],blocked{}} with per-artifact model hint.",
+      "deterministic": true
+    },
+    {
+      "cmd": "ahx order",
+      "purpose": "Full Kahn build order for inspection/debug.",
+      "deterministic": true
+    },
+    {
+      "cmd": "ahx complete <id> [--handoff f.json]",
+      "purpose": "KEYSTONE: validate worker handoff JSON against the artifact's schema FIRST, then mark complete in run.json. exit 1 if handoff invalid.",
+      "deterministic": true
+    },
+    {
+      "cmd": "ahx validate <id|path>",
+      "purpose": "Structural validation (md sections / frontmatter / manifest table). exit 0/1 + JSON issues.",
+      "deterministic": true
+    },
+    {
+      "cmd": "ahx gate <gate-id>",
+      "purpose": "Run named gate against filesystem+run-state. exit 0 pass / 1 BLOCK with {gate,passed,reasons,unmet}.",
+      "deterministic": true
+    },
+    {
+      "cmd": "ahx diff-criteria --define f --build f",
+      "purpose": "Set-diff DEFINE acceptance criteria vs BUILD passed results -> unmet[].",
+      "deterministic": true
+    },
+    {
+      "cmd": "ahx handoff-check <schema-id> <file.json>",
+      "purpose": "Standalone worker-output Zod validation.",
+      "deterministic": true
+    },
+    {
+      "cmd": "ahx retry <id> --inc | --ok",
+      "purpose": "Increment / check retry counter in run-state against config cap (powers bounded-loop). --ok exit 1 when ceiling hit.",
+      "deterministic": true
+    },
+    {
+      "cmd": "ahx route <task-kind> [--budget low|std]",
+      "purpose": "Pure routing fn -> {tier,model,reason}.",
+      "deterministic": true
+    },
+    {
+      "cmd": "ahx schema show|validate",
+      "purpose": "Inspect / Zod-validate the editable workflow schema.",
+      "deterministic": true
+    }
+  ],
+  "gates": [
+    {
+      "id": "G_DEFINE",
+      "when": "before /design",
+      "blocksIf": "DEFINE missing required ## sections (Why/What/Acceptance Criteria) OR zero acceptance criteria with stable AC-n IDs OR define handoff fails Zod"
+    },
+    {
+      "id": "G_DESIGN",
+      "when": "before /build",
+      "blocksIf": "DESIGN missing file-manifest table OR a manifest row lacks file/action/purpose OR no Decisions section"
+    },
+    {
+      "id": "G_BUILD",
+      "when": "before /ship",
+      "blocksIf": "any manifest file not present on disk OR criteria-diff(DEFINE,BUILD) non-empty OR BUILD_REPORT missing \u2014 replaces build.md prose checkbox + max-3 retry"
+    },
+    {
+      "id": "G_SHIP",
+      "when": "inside /ship",
+      "blocksIf": "define.criteria minus build.passed is non-empty (unmet acceptance criteria) OR SHIPPED artifact incomplete"
+    },
+    {
+      "id": "G_HANDOFF",
+      "when": "every ahx complete --handoff",
+      "blocksIf": "worker output JSON fails its declared handoff Zod schema"
+    },
+    {
+      "id": "G_KB_STRUCTURE",
+      "when": "during KB authoring",
+      "blocksIf": "domain dir missing manifest/index/quick-reference or has zero concept files"
+    },
+    {
+      "id": "G_KB_COVERAGE",
+      "when": "before KB complete",
+      "blocksIf": "a manifest-declared concept has no file OR test-cases below configured N"
+    },
+    {
+      "id": "G_ROUTER_COVERAGE",
+      "when": "gen-router before writing routing.json",
+      "blocksIf": "any agent frontmatter invalid OR an agent missing from routing OR an agent appears more than once (bijection broken) \u2014 no silent skip"
+    },
+    {
+      "id": "G_REVIEW_BLOCK",
+      "when": "/review and /migrate after adversarial pass",
+      "blocksIf": "count of surviving CRITICAL findings over validated Finding[] is greater than 0"
+    }
+  ],
+  "modelRouting": "Routing is first-class, pure (src/core/model-route/policy.ts), unit-tested, consumed two ways: static model: per artifact/agent, and dynamic `ahx route <task-kind>`. Default to the cheapest tier that can VERIFIABLY do the task. TABLE \u2014 HAIKU (mechanical, gate-backstopped): file read, structure extraction, frontmatter parse, template-fill, format conversion, claim extraction, ship/archive prose, sync-context section scans, router string assembly. SONNET (analysis/authoring/synthesis): spec authoring, design synthesis (impl sections), code build per file, KB concept authoring, finding analysis, claim verification, migration-plan authoring, deterministic merges. OPUS (deepest reasoning + adversarial): architecture decisions (DEFINE/DESIGN intent + ADRs), the _adversary/challenger role, migration equivalence-break, council/critic, review-judge on CRITICAL. TWO ENFORCED PRINCIPLES: (a) the verifier outranks-or-equals the generator on any critical gate \u2014 an Opus adversary challenges a Sonnet build; the cheaper tier is never the final judge of a CRITICAL finding; (b) tier downgrades are free ONLY when a deterministic gate backstops the output \u2014 Haiku does extraction because ahx validate catches its mistakes; --budget low shifts authoring Sonnet->Haiku only where a gate exists and NEVER downgrades the adversary or architect kinds. policy.test.ts asserts each task-kind->tier and that critical kinds never resolve below their floor.",
+  "coverage": [
+    {
+      "capability": "SDD Phase 0 Brainstorm",
+      "harnessApproach": "schemas/sdd brainstorm artifact (optional, model:opus); ahx next yields it; brainstorm-worker authors; ahx complete; no blocking gate."
+    },
+    {
+      "capability": "SDD Phase 1 Define",
+      "harnessApproach": "define-worker (opus) writes DEFINE.md + define handoff sidecar; ahx complete --handoff validates; ahx gate G_DEFINE (sections + AC-n IDs) blocks /design."
+    },
+    {
+      "capability": "SDD Phase 2 Design",
+      "harnessApproach": "ahx gate G_DEFINE first; design-worker (opus) writes manifest; ahx complete --handoff; ahx gate G_DESIGN (manifest table) blocks /build."
+    },
+    {
+      "capability": "SDD Phase 3 Build",
+      "harnessApproach": "ahx next + parallel_group fan-out of build-workers (sonnet) by manifest layer via Task; bounded-loop capped by config.build_retry_cap via ahx retry counters (run-state, not prose); ahx gate G_BUILD (file-existence + criteria diff) replaces checkbox; --judge passthrough to judge.py preserved."
+    },
+    {
+      "capability": "SDD Phase 4 Ship",
+      "harnessApproach": "ahx diff-criteria + ahx gate G_SHIP block on unmet criteria in code; haiku ship-worker writes archive prose; run-state marks all complete."
+    },
+    {
+      "capability": "KB creation",
+      "harnessApproach": "schemas/kb artifact graph manifest->concepts(parallel wave)->patterns->test-cases->index; concept-workers (sonnet) parallel; G_KB_STRUCTURE + G_KB_COVERAGE replace create-kb blind delegation to kb-architect."
+    },
+    {
+      "capability": "/review",
+      "harnessApproach": "parallel arch+security+CodeRabbit workers -> Finding[] (finding.handoff); ahx dedups by file+line in code; opus challenger on CRITICAL; G_REVIEW_BLOCK gates."
+    },
+    {
+      "capability": "/migrate",
+      "harnessApproach": "parallel dbt+spark plan workers in independent contexts -> MigrationPlan; independent equivalence-worker (not the author); opus adversary tries to break chosen plan; G_REVIEW_BLOCK on CRITICAL=0."
+    },
+    {
+      "capability": "/fact-check",
+      "harnessApproach": "haiku extract-worker -> Claim[] (claim.handoff); parallel verify-workers per claim; parallel correction pass; ahx only sequences+validates."
+    },
+    {
+      "capability": "/sync-context",
+      "harnessApproach": "5 parallel section-workers (haiku) -> ClaudeMdSection handoffs; deterministic merge honoring preserve/replace/merge rules in code, not LLM free-merge."
+    },
+    {
+      "capability": "agent-router generation",
+      "harnessApproach": "ahx parses every agent frontmatter with Zod (frontmatter.ts) replacing fragile regex Python; G_ROUTER_COVERAGE asserts bijection (every agent exactly once, none invalid, no silent skip) before routing.json is written."
+    },
+    {
+      "capability": "/ship criteria enforcement",
+      "harnessApproach": "criteria-diff.ts set-diff in TypeScript via G_SHIP \u2014 eliminates LLM passing an ambiguous checklist."
+    },
+    {
+      "capability": "58-agent roster + 24 KB domains + DE command surface",
+      "harnessApproach": "ported intact (plugin/agents, plugin/kb, plugin/commands/data-engineering) with added output_schema frontmatter; harness hardens control flow without diluting domain depth (Proposal 3 fidelity constraint)."
+    }
+  ],
+  "buildPlan": [
+    {
+      "phase": "P0 Scaffold + ship mechanics",
+      "detail": "Create repo, package.json (bin ahx, esbuild build.js, vitest), tsconfig, bin/ahx.js, LICENSE(MIT), CI yml. Mirror OpenSpec exactly so npx/node install works offline.",
+      "model": "haiku"
+    },
+    {
+      "phase": "P1 Port the deterministic spine VERBATIM",
+      "detail": "Copy OpenSpec graph.ts/schema.ts/types.ts/state.ts/outputs.ts into src/core/artifact-graph; port their unit tests. Run vitest green before changing anything. This is the proven Kahn+Zod+cycle core.",
+      "model": "main-loop"
+    },
+    {
+      "phase": "P2 Extend schema + run-state",
+      "detail": "Add model/handoff/validate/parallel_group/config/gates fields to types.ts Zod; build run-state.ts (atomic, schema-validated, retry counters) + run-state.test.ts. This is the crash-safe state keystone.",
+      "model": "main-loop"
+    },
+    {
+      "phase": "P3 Validation + handoff + criteria-diff",
+      "detail": "md-section-validator, frontmatter (Zod, fail-closed), criteria-diff, handoff/schemas.ts + handoff-check, with full unit tests. These back every gate.",
+      "model": "main-loop"
+    },
+    {
+      "phase": "P4 Gates",
+      "detail": "registry + gate-runner; author sdd-gates (opus \u2014 security-adjacent correctness), kb-gates, router-gate (opus), review-gate (opus). Each gate gets pass+fail+idempotent-rerun tests.",
+      "model": "opus"
+    },
+    {
+      "phase": "P5 Model-routing",
+      "detail": "policy.ts pure resolver + policy.test.ts asserting floors and gate-backed downgrades.",
+      "model": "opus"
+    },
+    {
+      "phase": "P6 CLI wiring",
+      "detail": "commander index.ts + command modules mapping Result->exit-code ABI; cli.test.ts spawns subprocess and asserts exit codes + stdout JSON.",
+      "model": "main-loop"
+    },
+    {
+      "phase": "P7 Editable schemas + templates",
+      "detail": "Author schemas/sdd/schema.yaml (encodes WORKFLOW_CONTRACTS.yaml as data) + schemas/kb/schema.yaml + handoff JSON Schemas; port templates from AgentSpec sdd/templates and kb/_templates.",
+      "model": "opus"
+    },
+    {
+      "phase": "P8 Port plugin assets intact",
+      "detail": "Copy 58 agents (add output_schema frontmatter), 24 KB domains, DE/core/visual commands that stay intact, skills, judge.py, hooks. Preserves domain depth.",
+      "model": "haiku"
+    },
+    {
+      "phase": "P9 Rewrite the harness-aware commands",
+      "detail": "build.md (parallel_group + bounded-loop + G_BUILD), ship.md (G_SHIP), create-kb.md (kb graph), review.md/migrate.md (adversarial + G_REVIEW_BLOCK), fact-check.md, sync-context.md, gen-router.md. Author worker agents + _adversary/challenger.",
+      "model": "opus"
+    },
+    {
+      "phase": "P10 Harness-doctrine skills",
+      "detail": "harness-protocol, model-routing, adversarial-gate, bounded-loop, parallel-fanout \u2014 ported from ECC good skills, explicitly NOT the fake-dispatch one.",
+      "model": "opus"
+    },
+    {
+      "phase": "P11 End-to-end fixture test",
+      "detail": "sdd-cycle.e2e.test.ts + kb-cycle.e2e.test.ts: drive full cycle through the CLI with fixtures incl. a deliberately-broken manifest; assert G_BUILD exit 1 then exit 0; final run-state complete. Add grep-guard test failing the build if src/ contains fetch/anthropic/claude -p.",
+      "model": "main-loop"
+    },
+    {
+      "phase": "P12 Verify + coverage",
+      "detail": "node build.js + vitest run green, coverage 80%+ on src/core, npx-install smoke test of the bundled CLI offline.",
+      "model": "main-loop"
+    }
+  ],
+  "e2eTestStrategy": "The deliverable test is test/e2e/sdd-cycle.e2e.test.ts: it drives the FULL 5-phase cycle through the real CLI (spawning node bin/ahx.js subprocesses), simulating the model layer with deterministic fixture files the test itself writes \u2014 including one deliberately-broken state (only 1 of 2 manifest files present). Sequence: ahx init --schema sdd; ahx next -> assert ready includes define; write DEFINE fixture + define handoff; ahx validate define exit 0; ahx complete define --handoff (asserts G_HANDOFF); ahx gate G_DEFINE exit 0; ahx next -> ready:[design]; write DESIGN with manifest; ahx complete design --handoff; ahx gate G_DESIGN exit 0; ahx next -> ready:[build]; write ONLY file1 of the manifest; ahx gate G_BUILD -> ASSERT EXIT 1 with unmet:[file2] (proves it BLOCKS); write file2 + BUILD_REPORT; ahx gate G_BUILD exit 0; ahx diff-criteria -> unmet:[]; ahx gate G_SHIP exit 0; ahx state -> phase:ship, complete:all. This asserts the harness blocks when it should and only advances when state is real \u2014 the property no prose-only design can be tested for. Parallel kb-cycle.e2e.test.ts (G_KB_COVERAGE blocks until every manifest concept exists) and router-gen coverage (inject duplicate agent -> G_ROUTER_COVERAGE exit 1). Plus: cli.test.ts asserts the exit-code ABI per command; every gate has a pass+fail+idempotent-rerun unit test (run twice from identical files -> identical result, proving crash-safety since gates read filesystem+run-state, never conversation). A grep-guard test fails CI if src/ contains fetch(/anthropic/claude -p, enforcing the no-model-calls invariant. CI runs node build.js + vitest run on every push with 80% coverage gate on src/core. No LLM, network, or mock-API needed \u2014 runs in seconds.",
+  "adversarialFindings": [
+    "PROPOSAL 1 (Opus) worst flaw: it under-commits on PRESERVING the 58-agent/24-KB domain depth \u2014 its file tree lists only ~6 worker agents and folds the rest into terse category dirs, risking a harness that is mechanically superior but strips the exact specialist content (dbt/spark/lakehouse/cloud agents, 24 KB domains) that is AgentSpec's whole reason to exist. RESOLVED: locked spec ports the full roster intact (plugin/agents _roster_de/PORT.md + plugin/kb/PORT.md) with only an added output_schema frontmatter field, adopting Proposal 3's fidelity constraint while keeping Proposal 1's spine.",
+    "PROPOSAL 2 (ergonomics) worst flaw: its gates and state are LLM-invoked mutations with NO validation between worker output and `ahx state complete <id>` \u2014 `ahx validate <file> --schema` and `ahx state complete` are separate optional steps a command can skip, so a worker can produce garbage and the command can still mark the artifact done, reopening the self-marking hole it set out to close. It also reintroduces a regex-scraped clarity score (G_DEFINE_CLARITY reads a score line from markdown) which is exactly the brittle prose-coupling to avoid. RESOLVED: locked spec makes `ahx complete --handoff` a SINGLE atomic command that validates the handoff Zod schema BEFORE marking complete (no skippable seam), and evaluates structure from a machine-facing handoff sidecar JSON, not a scraped markdown score.",
+    "PROPOSAL 3 (fidelity) worst flaw: it relies on a separate human-markdown artifact PLUS a sidecar handoff JSON but never makes the run-state CRASH-SAFE or the gates IDEMPOTENT \u2014 gates read .ahx/state.json and retry counters, but nothing guarantees those survive a mid-session plugin death or that re-running a gate from the same files yields the same verdict; its e2e test marks artifacts done via `ahx mark-done` with no handoff validation in the marking step. RESOLVED: locked spec adopts Proposal 1's rule that gates read filesystem+run-state ONLY (never conversation), adds idempotent-re-run unit tests for every gate, and makes run-state.ts atomic + Zod-validated on every read."
+  ],
+  "residualRisks": [
+    "INSTALL REACH (highest): a Claude Code plugin ships markdown and does not auto-run npm install, so ahx must reach the user's shell. Locked default: commit prebuilt dist/ in the plugin and invoke via node \"${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js\" (offline, self-contained, matches how AgentSpec already ships scripts/judge.py); a SessionStart hook runs node build.js if dist/ is missing. npx @agentspec/ahx is the documented fallback. Must be validated by an offline smoke test in P12.",
+    "WORKER NON-COMPLIANCE: a subagent may return prose instead of the JSON handoff. Mitigated because ahx complete --handoff exits 1 on invalid JSON, forcing the command into bounded-loop re-dispatch \u2014 but the command body must actually branch on that exit code; a sloppily-authored command could ignore it. Mitigation: harness-protocol skill makes exit-code branching mandatory and gen-router/ci could lint commands for the pattern (future).",
+    "SIDECAR DRIFT: the human-facing markdown artifact and the machine handoff JSON can diverge (worker writes a good DEFINE.md but a stale handoff). Gates trust the JSON; humans read the markdown. Mitigation: validate command can cross-check key fields (criteria IDs) appear in both; not fully closed in MVP.",
+    "SCHEMA-FORK FOOTGUN: users editing schemas/sdd/schema.yaml can introduce a cycle or dangling require; ahx schema validate catches it (DFS cycle + dangling-ref checks ported), but only if the command/hook runs it before use. Mitigation: ahx next/gate call parseSchema which throws SchemaValidationError on load.",
+    "COST: Opus on define/design/build-adversary is the default; on large features the adversarial + opus-authoring passes are the dominant spend. --budget low downgrades gated authoring to Haiku/Sonnet but never the adversary; users on a tight budget must opt in explicitly."
+  ]
+}

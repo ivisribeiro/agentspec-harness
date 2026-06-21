@@ -1,0 +1,40 @@
+name: kb
+version: 1
+description: >
+  Knowledge-base domain authoring workflow. Replaces create-kb's blind delegation
+  with a real artifact graph + structural/coverage gates. feature = domain name.
+
+config:
+  kb_min_test_cases: 1
+
+gates:
+  during: G_KB_STRUCTURE
+  before_complete: G_KB_COVERAGE
+
+artifacts:
+  - id: manifest
+    generates: manifest.json
+    model: sonnet
+    requires: []
+    description: Concept inventory for the domain ({ concepts: [{ slug }] }).
+
+  - id: concepts
+    generates: concept-*.md
+    model: sonnet
+    parallel_group: concepts
+    requires: [manifest]
+    description: One file per manifest concept; authored as a parallel wave.
+
+  - id: quick-reference
+    generates: quick-reference.md
+    template: quick-reference.md
+    model: haiku
+    requires: [concepts]
+    description: Cheat-sheet distilled from the concepts.
+
+  - id: index
+    generates: index.md
+    template: index.md
+    model: haiku
+    requires: [quick-reference]
+    description: Domain landing page linking every concept.
