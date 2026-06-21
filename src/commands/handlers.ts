@@ -207,10 +207,16 @@ export function diffCriteriaHandler(
   if (!fs.existsSync(definePath) || !fs.existsSync(buildPath)) {
     return usage('define and/or build handoff file not found');
   }
-  const define = JSON.parse(fs.readFileSync(definePath, 'utf-8')) as { criteria?: string[] };
-  const build = JSON.parse(fs.readFileSync(buildPath, 'utf-8')) as {
-    results?: Array<{ criterion: string; status: string }>;
-  };
+  let define: { criteria?: string[] };
+  let build: { results?: Array<{ criterion: string; status: string }> };
+  try {
+    define = JSON.parse(fs.readFileSync(definePath, 'utf-8'));
+    build = JSON.parse(fs.readFileSync(buildPath, 'utf-8'));
+  } catch {
+    return usage(
+      'diff-criteria expects the JSON handoff sidecars (.ahx/.../.handoffs/define.json and build.json), not the markdown artifacts'
+    );
+  }
   const passed = (build.results ?? []).filter((r) => r.status === 'passed').map((r) => r.criterion);
   const diff = criteriaDiff(define.criteria ?? [], passed);
   return diff.unmet.length === 0 ? ok(diff) : blocked(diff);

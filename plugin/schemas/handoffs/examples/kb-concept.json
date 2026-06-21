@@ -1,0 +1,1 @@
+{ "concept": "incremental-models", "summary": "dbt models that process only new rows", "test_cases": ["unique key not null", "no duplicate rows after merge"], "needs_decoding": false }

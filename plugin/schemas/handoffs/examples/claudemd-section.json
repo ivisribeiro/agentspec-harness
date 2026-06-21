@@ -1,0 +1,1 @@
+{ "section": "Architecture", "strategy": "merge", "content": "## Architecture\nControl plane orchestrates; runner executes." }

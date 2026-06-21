@@ -132,8 +132,8 @@ Once every build unit has passed `ahx complete`, assemble the phase-level
 {
   "feature": "<feature-slug>",
   "results": [
-    { "criterion": "AC-1", "status": "pass" },
-    { "criterion": "AC-2", "status": "pass" }
+    { "criterion": "AC-1", "status": "passed" },
+    { "criterion": "AC-2", "status": "passed" }
   ],
   "files_written": [
     ".ahx/features/<feature>/.handoffs/<id>.json",

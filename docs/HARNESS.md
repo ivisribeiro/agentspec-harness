@@ -152,12 +152,16 @@ over the `generates` path (OpenSpec's `detectCompleted` insight) *and* via the
 union with the CLI-written completed set — so a completed artifact survives even if
 its output file is later touched.
 
-### 3.3 The nine gates
+### 3.3 The gates
 
-A gate is a pure function `(ctx: RunContext) => GateResult` where
-`RunContext = { runDir, runState, graph, readFile }`. It reads filesystem and state,
-never conversation. `ahx gate <id>` runs it and maps `passed: false` to **exit 1**
-with JSON `{ gate, passed, reasons, unmet }`.
+A gate is a pure function `(ctx: GateContext) => GateResult`. It reads filesystem
+and run-state, never conversation. `ahx gate <id>` runs it and maps
+`passed: false` to **exit 1** with JSON `{ gate, passed, reasons, unmet }`.
+
+**Eight gates are invokable via `ahx gate <id>`** (the eight in `registry.ts`
+below). **`G_HANDOFF` is not** — it is the validation enforced *inside*
+`ahx complete --handoff` (so it has nowhere to be skipped), listed here for
+completeness. `ahx gate G_HANDOFF` returns "unknown gate".
 
 | Gate | When | Blocks if… | Tier |
 |---|---|---|---|
@@ -249,6 +253,7 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js <args>
 | `ahx handoff-check <schemaId> <file.json>` | standalone handoff validation |
 | `ahx retry <id> --inc \| --ok` | retry counter vs `config.build_retry_cap`; `--ok` exits 1 at ceiling |
 | `ahx route <taskKind> [--budget std\|low]` | `{ tier, model, reason }` |
+| `ahx kinds` | list the known routing task-kinds |
 | `ahx schema show\|validate` | inspect / Zod-validate the active editable schema |
 
 **Exit-code ABI (commands branch on this):**
@@ -445,9 +450,11 @@ These are tracked, not solved-and-forgotten:
   auto-run `npm install`, so `ahx` must reach the user's shell. Locked default:
   commit prebuilt `dist/` in the plugin and invoke via
   `node "${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js"` (offline, self-contained); a
-  `SessionStart` hook runs `node build.js` if `dist/` is missing.
-  `npx @agentspec/ahx` is the documented fallback. Validated by an offline smoke
-  test.
+  `SessionStart` hook runs `node build.js` if `dist/` is missing. `build.js`
+  also syncs `dist/` + `schemas/` into `plugin/` so `${CLAUDE_PLUGIN_ROOT}/dist`
+  resolves on a real plugin install. Validated by an offline smoke test (CI's
+  `bundle-self-contained` job). Building from source (`npm run build`) is the
+  documented fallback until an npm/marketplace package is published.
 - **Worker non-compliance.** A subagent may return prose instead of JSON.
   Mitigated because `ahx complete --handoff` exits 1 on invalid JSON, forcing the
   bounded-loop re-dispatch — but the command body must actually branch on that exit

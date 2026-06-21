@@ -48,19 +48,20 @@ export const BuildReportHandoff = z.object({
 
 export const Severity = z.enum(['critical', 'high', 'medium', 'low']);
 
+// NOTE: `findings` is REQUIRED (no default). A findings file that omits the key
+// must fail loudly — otherwise a malformed `{...}` would validate as `{findings:[]}`
+// and G_REVIEW_BLOCK would silently pass a dropped CRITICAL.
 export const FindingHandoff = z.object({
-  findings: z
-    .array(
-      z.object({
-        file: z.string().min(1),
-        line: z.number().int().nonnegative().optional(),
-        severity: Severity,
-        rule: z.string().min(1),
-        message: z.string().min(1),
-        source: z.string().min(1), // which worker / tool produced it
-      })
-    )
-    .default([]),
+  findings: z.array(
+    z.object({
+      file: z.string().min(1),
+      line: z.number().int().nonnegative().optional(),
+      severity: Severity,
+      rule: z.string().min(1),
+      message: z.string().min(1),
+      source: z.string().min(1), // which worker / tool produced it
+    })
+  ),
 });
 
 export const ClaimHandoff = z.object({

@@ -1,4 +1,6 @@
 import { Command } from 'commander';
+import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
 import {
   initHandler,
   stateHandler,
@@ -145,4 +147,29 @@ export async function runCli(
     return 2;
   }
   return exitCode;
+}
+
+// Self-execute when run directly as the process entrypoint (e.g. the plugin
+// commands invoke `node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js <args>`). When
+// imported (bin/ahx.js, vitest), this guard is false and nothing auto-runs.
+// realpath-normalizes both sides so a symlinked path (macOS /var -> /private/var,
+// or a symlinked install dir) still self-executes.
+function isDirectEntrypoint(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectEntrypoint()) {
+  runCli(process.argv).then(
+    (code) => process.exit(code),
+    (err) => {
+      process.stderr.write((err?.stack || String(err)) + '\n');
+      process.exit(3);
+    }
+  );
 }

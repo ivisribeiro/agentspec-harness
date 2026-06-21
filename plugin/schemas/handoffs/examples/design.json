@@ -1,0 +1,1 @@
+{ "feature": "user-auth", "manifest": [ { "file": "src/auth.ts", "action": "create", "purpose": "login flow" }, { "file": "src/session.ts", "action": "modify", "purpose": "session store" } ], "decisions": ["use JWT with rotating refresh tokens"] }

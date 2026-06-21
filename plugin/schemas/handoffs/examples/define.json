@@ -1,0 +1,1 @@
+{ "feature": "user-auth", "clarity": 0.92, "criteria": ["AC-1", "AC-2"], "open_questions": ["SSO in scope?"] }

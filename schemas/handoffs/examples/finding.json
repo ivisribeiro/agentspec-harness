@@ -1,0 +1,1 @@
+{ "findings": [ { "file": "src/auth.ts", "line": 42, "severity": "critical", "rule": "hardcoded-secret", "message": "API key committed in source", "source": "security-worker" } ] }

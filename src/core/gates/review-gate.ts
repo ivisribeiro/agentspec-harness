@@ -25,6 +25,20 @@ export function gReviewBlock(ctx: GateContext): GateResult {
     return block(gate, [`findings file is not valid JSON: ${findingsPath}`], ['findings-json']);
   }
 
+  // Reject the wrong shape loudly — a flat finding object or a missing `findings`
+  // key must NOT be silently treated as zero findings (that would drop CRITICALs).
+  if (
+    parsed === null ||
+    typeof parsed !== 'object' ||
+    !Array.isArray((parsed as { findings?: unknown }).findings)
+  ) {
+    return block(
+      gate,
+      ['findings file must be an object with a "findings" array (got the wrong shape)'],
+      ['findings-shape']
+    );
+  }
+
   const check = checkHandoffObject('finding', parsed);
   if (!check.ok) {
     return block(gate, [`findings do not match Finding contract: ${check.errors.join('; ')}`], [

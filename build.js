@@ -5,7 +5,7 @@
 
 import * as esbuild from 'esbuild';
 import { execFileSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, rmSync, cpSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -35,4 +35,15 @@ await esbuild.build({
   },
 });
 
-console.log('Build completed: dist/cli/index.js');
+// Sync the self-contained bundle + schemas INTO plugin/ so that, on a real Claude
+// Code install, ${CLAUDE_PLUGIN_ROOT} (= plugin/) resolves ${CLAUDE_PLUGIN_ROOT}/dist
+// and the CLI finds plugin/schemas/. Without this the plugin's `ahx` shorthand
+// would point at a non-existent path. (The repo-root dist/ + schemas/ remain for
+// npm/vitest.)
+console.log('Syncing bundle + schemas into plugin/...');
+for (const sub of ['dist', 'schemas']) {
+  rmSync(`plugin/${sub}`, { recursive: true, force: true });
+  cpSync(sub, `plugin/${sub}`, { recursive: true });
+}
+
+console.log('Build completed: dist/cli/index.js (+ plugin/dist, plugin/schemas).');

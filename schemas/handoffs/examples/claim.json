@@ -1,0 +1,1 @@
+{ "claims": [ { "id": "c1", "text": "The pipeline retries 3 times", "verified": true, "verdict": "true", "evidence": "config.build_retry_cap = 3" } ] }

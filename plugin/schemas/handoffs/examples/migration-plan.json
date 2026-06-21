@@ -1,0 +1,1 @@
+{ "engine": "dbt", "steps": ["stage raw orders", "build incremental model", "add tests"], "risks": ["backfill cost"], "rollback": "drop the new models and re-point downstream refs to the legacy table" }

@@ -1,0 +1,1 @@
+{ "feature": "user-auth", "results": [ { "criterion": "AC-1", "status": "passed" }, { "criterion": "AC-2", "status": "passed" } ], "files_written": ["src/auth.ts", "src/session.ts"] }

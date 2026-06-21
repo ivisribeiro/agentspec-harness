@@ -19,12 +19,14 @@ Exit 0 → continue.
 
 ### 2. Diff criteria (define vs build)
 
-Read the DEFINE artifact path and BUILD_REPORT path from `ahx state`, then run:
+`diff-criteria` reads the JSON **handoff sidecars** (not the markdown artifacts).
+`ahx complete` stored them at `.handoffs/<artifact-id>.json`, so use `define.json`
+and `build.json`:
 
 ```
 node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js diff-criteria \
-  --define .ahx/features/<feature>/DEFINE.md \
-  --build  .ahx/features/<feature>/BUILD_REPORT.md
+  --define .ahx/features/<feature>/.handoffs/define.json \
+  --build  .ahx/features/<feature>/.handoffs/build.json
 ```
 
 If `unmet[]` is non-empty → surface the unmet criteria to the user and STOP. Do not proceed to G_SHIP.

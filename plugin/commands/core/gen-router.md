@@ -1,82 +1,56 @@
 ---
 name: gen-router
-description: Parse every agent frontmatter and assemble the agent-router routing.json, then assert bijection via G_ROUTER_COVERAGE. Replaces the legacy regex Python router that silently skipped malformed files.
+description: Parse every agent frontmatter and assemble the agent-router routing.json, then assert agent->routing bijection via G_ROUTER_COVERAGE. Replaces the legacy regex Python router that silently skipped malformed files.
 ---
 
-Generate the agent-router routing table from source-of-truth agent frontmatter, validate it with a deterministic gate, and surface any parse failures or coverage gaps before they become silent skips.
+Generate the agent-router routing table from source-of-truth agent frontmatter
+and validate it with a deterministic gate that fails closed on any malformed,
+missing, or duplicated agent — no silent skips.
 
-## 1 — Discover agents and parse frontmatter
+`/gen-router` is a **one-shot** command: it does not `ahx init` a run, so there
+is no run-state, no `ahx next/complete/retry`, and no graph artifact. The single
+deterministic check is `ahx gate G_ROUTER_COVERAGE`, which both parses every
+agent's frontmatter (fail-closed) and asserts the bijection. The gate is the
+validator — the command's job is only to assemble `routing.json` and branch on
+the gate's exit code.
 
-Dispatch one HAIKU worker per agent file found under `plugin/agents/`. Fan out all files in a **single message** (true parallel, same `parallel_group`).
+## 1 — Assemble routing.json
 
-```
-ahx route frontmatter-parse
-```
+Dispatch one worker on the `router-assemble` task kind (haiku — mechanical) to
+read every agent file under `plugin/agents/` (skip `README.md` and `_`-prefixed
+files), extract the `name` from each frontmatter, and write the routing table.
 
-Each worker:
-- Reads the agent `.md` file.
-- Extracts `name`, `description`, `model`, `tools` from the YAML frontmatter.
-- **Fails closed**: if frontmatter is missing, malformed YAML, or `name`/`description` are absent, the worker writes a `finding` handoff (schema id: `finding`) with `severity: CRITICAL` and exits non-zero — do NOT silently skip the file.
-- On success writes a `build-task` handoff (schema id: `build-task`) with the parsed fields.
-
-Complete each worker:
-
-```
-ahx complete <worker-id> --handoff .ahx/features/gen-router/.handoffs/<worker-id>.json
-```
-
-If `ahx complete` exits 1 (invalid handoff):
-
-```
-ahx retry <worker-id> --inc   # increment retry counter
-ahx retry <worker-id> --ok    # exits 1 at ceiling — surface error and stop
-```
-
-Re-dispatch the worker on `--inc` success; stop on `--ok` ceiling.
-
-## 2 — Fail-closed on any parse error
-
-After all workers complete, check for any `finding` handoffs with `severity: CRITICAL`:
-
-If any exist, surface the full list of malformed agent files and **stop**. Do not assemble a partial routing table. The gate in step 4 would catch this too, but failing here produces a clearer error message.
-
-## 3 — Assemble routing.json
-
-Dispatch one HAIKU worker (task-kind `router-assemble`) to merge all successful `build-task` handoffs into `plugin/skills/agent-router/routing.json` with the shape:
-
-```json
-{
-  "agents": [
-    { "name": "<name>", "description": "<description>", "model": "<model>", "tools": ["..."] }
-  ]
-}
-```
-
-```
+```bash
 ahx route router-assemble
 ```
 
-Complete the worker:
+`routing.json` is a flat list of agent **names** (this is the exact shape
+`G_ROUTER_COVERAGE` validates):
 
+```json
+{ "agents": ["arch-worker", "security-worker", "challenger", "..."] }
 ```
-ahx complete <assembler-id> --handoff .ahx/features/gen-router/.handoffs/<assembler-id>.json
-```
 
-Retry via `ahx retry` if `ahx complete` exits 1, bounded by the retry cap.
+Write it to `plugin/skills/agent-router/routing.json`. Do not invent entries and
+do not drop a file because its frontmatter looks odd — list every agent; the gate
+will report the malformed ones precisely.
 
-## 4 — Assert bijection with G_ROUTER_COVERAGE
+## 2 — Assert the bijection with G_ROUTER_COVERAGE
 
-```
+```bash
 ahx gate G_ROUTER_COVERAGE --agents plugin/agents --routing plugin/skills/agent-router/routing.json
 ```
 
-Exit-code handling:
+The gate parses each agent's frontmatter (fail-closed: a file with no parseable
+`name` is an error, never a skip) and asserts a bijection: every agent appears in
+`routing.json` exactly once, none is missing, and none is unknown.
 
 | Exit | Meaning | Action |
 |------|---------|--------|
-| 0 | Bijection holds — every agent appears exactly once, no invalid entries, no silent skips | Proceed |
-| 1 | Gate blocked — `{gate, passed, reasons, unmet}` printed by ahx | Surface `reasons` and `unmet` to the user; **stop** |
-| 2 | Usage error | Surface the error; stop |
-| 3 | Internal error | Surface the error; stop |
+| 0 | Bijection holds — every agent exactly once, no invalid frontmatter, no silent skips | Report the agent count + the routing.json path. Done. |
+| 1 | Blocked — `{gate, passed, reasons, unmet}` printed by ahx. `unmet` entries are tagged `missing:<name>`, `duplicate:<name>`, `extra:<name>`, or the malformed file path | Surface `reasons` + `unmet`. Fix the offending agent frontmatter or the routing list, then re-run. **Stop** — do not ship a partial router. |
+| 2 / 3 | Usage / internal error | Surface and stop. |
 
-On gate pass, report the agent count and the path of the written `routing.json`. Done.
+Never assemble a partial routing table to make the gate pass, and never invent
+`ahx` flags, gate ids, or handoff schemas beyond `route` and
+`gate G_ROUTER_COVERAGE`.

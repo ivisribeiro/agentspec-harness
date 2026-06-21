@@ -28,7 +28,7 @@ Dispatch BOTH workers in a SINGLE Task message (true parallel, same parallel_gro
 >
 > For each finding produce one JSON object:
 > ```json
-> { "severity": "critical|high|medium|low", "file": "<path>", "line": <N or null>, "title": "<short>", "detail": "<evidence-grounded explanation>" }
+> { "severity": "critical|high|medium|low", "file": "<path>", "line": <N or null>, "rule": "<short rule/category>", "message": "<evidence-grounded explanation>", "source": "<arch-worker|security-worker>" }
 > ```
 >
 > Write a JSON array of all findings to:
@@ -45,7 +45,7 @@ Dispatch BOTH workers in a SINGLE Task message (true parallel, same parallel_gro
 >
 > For each finding produce one JSON object:
 > ```json
-> { "severity": "critical|high|medium|low", "file": "<path>", "line": <N or null>, "title": "<short>", "detail": "<evidence-grounded explanation>" }
+> { "severity": "critical|high|medium|low", "file": "<path>", "line": <N or null>, "rule": "<short rule/category>", "message": "<evidence-grounded explanation>", "source": "<arch-worker|security-worker>" }
 > ```
 >
 > Write a JSON array of all findings to:

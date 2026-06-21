@@ -25,14 +25,16 @@ ahx  ─── deterministic spine ───  never calls a model
 
 ## Install
 
-### Option A — Claude Code plugin (canonical)
+### Option A — Claude Code plugin (local, works today)
 
 ```bash
-# in your project or globally
-claude plugin add agentspec-harness
+git clone https://github.com/ivisribeiro/agentspec-harness.git
+claude --plugin-dir ./agentspec-harness/plugin
 ```
 
-The plugin wires the slash commands and ships the prebuilt `dist/cli/index.js` binary. All slash commands invoke the CLI as:
+`plugin/` ships the prebuilt, self-contained `dist/cli/index.js` (deps inlined,
+runs offline) and `schemas/`, so the slash commands work with no `npm install`.
+All commands invoke the CLI as:
 
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js <args>
@@ -40,13 +42,16 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js <args>
 
 The documented shorthand throughout this README is `ahx <args>`.
 
-### Option B — npx fallback (no plugin install)
+### Option B — build from source / use the CLI directly
 
 ```bash
-npx agentspec-harness <args>
+git clone https://github.com/ivisribeiro/agentspec-harness.git
+cd agentspec-harness && npm install && npm run build
+node bin/ahx.js <args>      # the `ahx` CLI
 ```
 
-Same binary, no plugin wiring — useful for CI or one-off validation.
+> Marketplace install (`claude plugin add …`) and an `npx` package are planned
+> once published; the two paths above are the supported install methods today.
 
 ### Option C — prebuilt dist (embed in your repo)
 
@@ -235,7 +240,7 @@ After editing, run `ahx schema validate` before running any workflow command. Th
 
 ## Test and CI story
 
-The harness ships with 63 unit and integration tests covering:
+The harness ships with **93 unit, integration, and end-to-end tests** (run `npm test`) covering:
 
 - Kahn ordering correctness under all dependency topologies
 - Gate pass/block logic for every gate ID
