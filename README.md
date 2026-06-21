@@ -73,7 +73,10 @@ Copy `dist/` into your project and invoke `node dist/cli/index.js` directly. Pin
 | `spin diff-criteria --define f --build f` | Set-diff DEFINE criteria vs BUILD passed → `unmet[]` | 0 / 1 |
 | `spin handoff-check <schemaId> <file.json>` | Standalone handoff validation | 0 / 1 |
 | `spin retry <id> --inc \| --ok` | Retry counter vs `config.build_retry_cap`. `--ok` exits 1 at ceiling | 0 / 1 |
-| `spin route <taskKind> [--budget std\|low]` | Returns `{ tier, model, reason }` for a task kind | 0 |
+| `spin route <taskKind> [--budget std\|low]` | Model tier for an agent: `{ tier, model, reason }` | 0 |
+| `spin tier [--risk\|--breadth\|--have-context\|--mechanical\|--reversible\|--irreversible]` | Orchestration tier T0/T1/T2 — main loop / one agent / fan-out | 0 |
+| `spin reconcile --audit f.json` | Doc-vs-code drift over an audit handoff | 0 / 1 |
+| `spin config-drift --declared a,b --present a` | Tools required by CI but absent from the lockfile | 0 / 1 |
 | `spin schema show\|validate` | Inspect or validate the active editable schema | 0 / 1 |
 
 **Exit-code ABI:** `0` = pass · `1` = gate blocked / handoff invalid · `2` = usage error · `3` = internal error
@@ -94,6 +97,9 @@ Gates are run via `spin gate <id>`. A command that receives exit 1 surfaces `{ga
 | `G_KB_COVERAGE` | KB publish | KB coverage checks |
 | `G_ROUTER_COVERAGE` | router validate | Agent→routing bijection, no silent skips |
 | `G_REVIEW_BLOCK` | `/review` · `/migrate` ship | Surviving CRITICAL findings > 0 → block |
+| `G_AUDIT` | `/audit` (brownfield) | Empty audit, or a `built[]` item without evidence, or a gap without a priority |
+| `G_OPS_CONFIG` | brownfield sign-off | Any `opsReadiness[]` item `enforced: false` (coded but inert-in-prod flag) |
+| `G_PLAN` | before `/build` of a plan | Vague-acceptance task, L/XL task bundling >1 domain, or an unaddressed blocking gap |
 | `G_HANDOFF` | (enforced inside `spin complete --handoff`) | Handoff JSON matches declared schema |
 
 ---
@@ -102,7 +108,9 @@ Gates are run via `spin gate <id>`. A command that receives exit 1 surfaces `{ga
 
 Workers write a JSON sidecar matching one of these schema IDs; the slash command passes it to `spin complete --handoff <sidecar>`.
 
-`define` · `design` · `build-task` · `build-report` · `finding` · `claim` · `migration-plan` · `claudemd-section` · `kb-concept`
+`define` · `design` · `build-task` · `build-report` · `finding` · `claim` · `migration-plan` · `claudemd-section` · `kb-concept` · `audit`
+
+> The `audit` handoff is the **brownfield** contract — structured `built[]`/`gaps[]`/`weakPoints[]`/`opsReadiness[]`/`proposedTasks[]`/`invariants_at_risk[]` — driven by the separate `brownfield` schema (`audit → define → design`) and the `/audit` command, so the spine models audit-then-plan, not just greenfield. See `docs/IMPROVEMENTS_FROM_DOGFOOD.md`.
 
 ---
 

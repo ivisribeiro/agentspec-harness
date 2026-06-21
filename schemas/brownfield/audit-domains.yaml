@@ -1,0 +1,48 @@
+# .spindle/audit-domains.yaml
+#
+# Optional configuration for /audit. Declares the bounded file scope each
+# auditor worker receives. Without this file, /audit derives domains from the
+# codebase structure and caps each worker at 50 files.
+#
+# Fields per domain:
+#   domain      — short slug; becomes the sidecar filename: audit-{domain}.json
+#   file_globs  — glob patterns relative to the repo root (standard glob syntax)
+#   max_files   — hard cap on files passed to this worker (default 50 if omitted)
+#
+# Why cap max_files?
+#   A worker that receives too many files will skim the last ones. The cap forces
+#   the fan-out to stay within the context budget per worker, which is what makes
+#   the parallel-fanout pattern safe for large codebases.
+#
+# Copy this file to .spindle/audit-domains.yaml and edit for your project.
+
+domains:
+  - domain: auth
+    file_globs:
+      - "src/auth/**"
+      - "src/middleware/auth*.ts"
+      - "src/middleware/session*.ts"
+    max_files: 40
+
+  - domain: api
+    file_globs:
+      - "src/api/**"
+      - "src/routes/**"
+      - "src/controllers/**"
+    max_files: 60
+
+  - domain: data
+    file_globs:
+      - "src/db/**"
+      - "src/models/**"
+      - "src/repositories/**"
+      - "migrations/**"
+    max_files: 50
+
+  - domain: infra
+    file_globs:
+      - "deploy/**"
+      - "docker-compose*.yml"
+      - ".env.example"
+      - "scripts/**"
+    max_files: 30

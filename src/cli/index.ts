@@ -16,6 +16,8 @@ import {
   tierHandler,
   schemaHandler,
   listTaskKindsHandler,
+  reconcileHandler,
+  configDriftHandler,
   type HandlerResult,
 } from '../commands/handlers.js';
 
@@ -90,11 +92,15 @@ export async function runCli(
     .option('--agents <dir>', 'agents dir (G_ROUTER_COVERAGE)')
     .option('--routing <file>', 'routing.json (G_ROUTER_COVERAGE)')
     .option('--findings <file>', 'findings.json (G_REVIEW_BLOCK)')
+    .option('--handoff <file>', 'audit.json sidecar (G_AUDIT)')
+    .option('--audit <file>', 'audit.json sidecar (G_OPS_CONFIG, G_PLAN)')
     .action(function (this: Command, gateId, opts) {
       const args: Record<string, string> = {};
       if (opts.agents) args.agents = opts.agents;
       if (opts.routing) args.routing = opts.routing;
       if (opts.findings) args.findings = opts.findings;
+      if (opts.handoff) args.handoff = opts.handoff;
+      if (opts.audit) args.audit = opts.audit;
       emit(gateHandler(root(this), gateId, args));
     });
 
@@ -152,6 +158,25 @@ export async function runCli(
     .description('show | validate the active workflow schema')
     .action(function (this: Command, action) {
       emit(schemaHandler(root(this), action));
+    });
+
+  program
+    .command('reconcile')
+    .description('detect doc-vs-code drift in an audit handoff (exit 1 if inconsistent/drift items exist)')
+    .requiredOption('--audit <file>', 'audit handoff JSON to reconcile')
+    .action(function (this: Command, opts) {
+      emit(reconcileHandler(opts));
+    });
+
+  program
+    .command('config-drift')
+    .description(
+      'detect tools declared in CI but absent from the lockfile (exit 1 if any missing)'
+    )
+    .requiredOption('--declared <list>', 'comma-separated tools required by CI')
+    .requiredOption('--present <list>', 'comma-separated tools found in the lockfile')
+    .action(function (this: Command, opts) {
+      emit(configDriftHandler(opts));
     });
 
   try {

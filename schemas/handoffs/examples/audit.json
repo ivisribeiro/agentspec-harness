@@ -1,0 +1,76 @@
+{
+  "domain": "auth",
+  "built": [
+    {
+      "item": "Row-level security on tenant tables",
+      "evidence": {
+        "files": ["src/db/rls.sql", "src/db/policies.ts"],
+        "lines": "rls.sql:12-48",
+        "proof": "ALTER TABLE ... ENABLE ROW LEVEL SECURITY present and policy USING (tenant_id = current_setting('app.tenant')) covers every tenant table"
+      },
+      "status": "proven",
+      "resolved_at_commit": "8cc15c8",
+      "verified_in_code": true
+    },
+    {
+      "item": "WorkOS webhook signature verification",
+      "evidence": {
+        "files": ["src/auth/webhook.ts"],
+        "proof": "verifySignature() called before body parse; rejects on mismatch with 401"
+      },
+      "status": "partial",
+      "resolved_at_commit": null,
+      "verified_in_code": true
+    }
+  ],
+  "gaps": [
+    {
+      "capability": "Rate limiting on the login endpoint",
+      "why": "No limiter wired on POST /auth/login — brute-force is unbounded",
+      "priority": "blocking"
+    },
+    {
+      "capability": "Session revocation on password change",
+      "why": "Old sessions stay valid after a password reset",
+      "priority": "important"
+    }
+  ],
+  "weakPoints": [
+    {
+      "item": "RLS relies on a session GUC that a superuser connection bypasses",
+      "severity": "high",
+      "evidence": "src/db/rls.sql uses current_setting('app.tenant') which is ignored for BYPASSRLS roles"
+    }
+  ],
+  "opsReadiness": [
+    {
+      "control": "ERIN_RUNNER_USE_BUNDLES",
+      "code_default": "false",
+      "prod_value_required": "true",
+      "env_files_checked": ["deploy/local/.env.e2e.local"],
+      "enforced": false
+    }
+  ],
+  "proposedTasks": [
+    {
+      "title": "Wire rate limiter on login endpoint",
+      "detail": "Add a per-IP token-bucket limiter to POST /auth/login; reject with 429 over threshold",
+      "effort": "M",
+      "external_preconditions": ["Redis instance provisioned"],
+      "domains": ["auth"]
+    },
+    {
+      "title": "Revoke sessions on password change",
+      "detail": "Invalidate all sessions for a user when their password hash changes",
+      "effort": "S",
+      "dependsOn": "Wire rate limiter on login endpoint",
+      "external_preconditions": [],
+      "domains": ["auth", "sessions"]
+    }
+  ],
+  "invariants_at_risk": ["tenant-isolation", "idempotency"],
+  "test_tiers": {
+    "unit": "vitest src/auth — always passes offline",
+    "infra_bound": "Postgres-backed RLS tests require a live tenant DB"
+  }
+}

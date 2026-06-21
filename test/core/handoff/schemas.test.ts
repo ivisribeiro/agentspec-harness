@@ -50,4 +50,71 @@ describe('handoff contracts', () => {
     expect(r.ok).toBe(false);
     expect(r.errors[0]).toContain('unknown handoff schema');
   });
+
+  it('accepts a minimal audit handoff and fills array defaults', () => {
+    const r = checkHandoffObject('audit', { domain: 'auth' });
+    expect(r.ok).toBe(true);
+    const data = r.data as {
+      built: unknown[];
+      gaps: unknown[];
+      opsReadiness: unknown[];
+      proposedTasks: unknown[];
+      invariants_at_risk: unknown[];
+    };
+    expect(data.built).toEqual([]);
+    expect(data.gaps).toEqual([]);
+    expect(data.opsReadiness).toEqual([]);
+    expect(data.proposedTasks).toEqual([]);
+    expect(data.invariants_at_risk).toEqual([]);
+  });
+
+  it('accepts a rich audit handoff with evidence, ops-readiness and tasks', () => {
+    const r = checkHandoffObject('audit', {
+      domain: 'auth',
+      built: [
+        {
+          item: 'RLS',
+          evidence: { files: ['src/db/rls.sql'], lines: '12-48', proof: 'ENABLE RLS present' },
+          status: 'proven',
+          resolved_at_commit: '8cc15c8',
+          verified_in_code: true,
+        },
+      ],
+      gaps: [{ capability: 'rate limit', why: 'brute force', priority: 'blocking' }],
+      weakPoints: [{ item: 'GUC bypass', severity: 'high', evidence: 'superuser ignores GUC' }],
+      opsReadiness: [
+        {
+          control: 'ERIN_RUNNER_USE_BUNDLES',
+          code_default: 'false',
+          prod_value_required: 'true',
+          enforced: false,
+        },
+      ],
+      proposedTasks: [{ title: 'wire limiter', detail: 'add bucket', effort: 'M' }],
+      invariants_at_risk: ['tenant-isolation'],
+      test_tiers: { unit: 'vitest', infra_bound: 'pg' },
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('rejects an audit gap with an invalid priority', () => {
+    const r = checkHandoffObject('audit', {
+      domain: 'auth',
+      gaps: [{ capability: 'x', why: 'y', priority: 'someday' }],
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects an audit built item with an invalid status', () => {
+    const r = checkHandoffObject('audit', {
+      domain: 'auth',
+      built: [{ item: 'x', evidence: { files: ['a.ts'], proof: 'p' }, status: 'maybe' }],
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects an audit handoff missing the required domain', () => {
+    const r = checkHandoffObject('audit', { built: [], gaps: [] });
+    expect(r.ok).toBe(false);
+  });
 });

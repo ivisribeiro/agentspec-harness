@@ -3,7 +3,12 @@
 > Propostas concretas e priorizadas de melhoria no Spindle, derivadas de
 > `DOGFOOD_LOG_erin-planning.md` (usar o Spindle pra planejar o erin-ingest real) +
 > a lição de custo de token desta sessão. Cada item nomeia o arquivo/comando/gate a mudar.
-> Status: **backlog** — nada implementado ainda. Decidir o que entra.
+> Status: ✅ **TODAS IMPLEMENTADAS (2026-06-21)** — I1-I10 shipped. I1 consolidou o
+> `AuditHandoff` (campos de I2/I7/I10/I4/I3/I9), schema `brownfield` (audit→define→design),
+> gate `G_AUDIT`. I4 `G_OPS_CONFIG`, I5 `G_PLAN`, I3 `spin reconcile`, I9 `spin config-drift`
+> + campo coverage, I8 comando `/audit`, I6 `spin tier`, I10 omission-checklist na skill.
+> Suíte: 102 → **189 testes**, 94% cobertura, build+guard verdes. Verificado por painel
+> adversário Opus (3 lentes, todas `upheld=true`) + check manual.
 
 ## Alta prioridade
 

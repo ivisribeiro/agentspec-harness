@@ -1,0 +1,47 @@
+name: brownfield
+version: 1
+description: >
+  Brownfield audit-driven workflow. Unlike the greenfield SDD cycle (which starts
+  from a blank define), this starts from an existing codebase: a first-class
+  `audit` artifact inventories what is already built (with evidence), the gaps,
+  the weak points and the ops-readiness controls, then bridges into define/design
+  via the typed proposedTasks. feature = the domain or subsystem under audit.
+
+# Lifecycle hook -> gate(s) the command must run.
+gates:
+  during: G_AUDIT
+
+artifacts:
+  - id: audit
+    generates: AUDIT.md
+    template: audit.md
+    model: opus
+    handoff: audit
+    parallel_group: by_domain
+    requires: []
+    description: >
+      Phase 0 — brownfield inventory. What is built (with file+line evidence and
+      proven/partial/scaffolded status), the gaps (blocking/important/nice-to-have),
+      weak points, ops-readiness controls, and the proposedTasks bridge into define.
+
+  - id: define
+    generates: DEFINE.md
+    template: define.md
+    model: opus
+    handoff: define
+    requires: [audit]
+    description: Phase 1 — requirements distilled from the audit's proposedTasks.
+    validate:
+      md_sections: [Why, What, Acceptance Criteria]
+      criteria_ids_prefix: AC
+
+  - id: design
+    generates: DESIGN.md
+    template: design.md
+    model: opus
+    handoff: design
+    requires: [define]
+    description: Phase 2 — architecture + a file manifest the build executes.
+    validate:
+      md_sections: [Overview, File Manifest, Decisions]
+      manifest_table: true

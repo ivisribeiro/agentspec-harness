@@ -174,6 +174,9 @@ completeness. `spin gate G_HANDOFF` returns "unknown gate".
 | `G_KB_COVERAGE` | before KB complete | a manifest-declared concept has no file, OR test-cases below configured N | — |
 | `G_ROUTER_COVERAGE` | gen-router, before writing routing.json | any agent frontmatter invalid, OR an agent missing from routing, OR an agent appears more than once (bijection broken) — **no silent skip** | opus-critical |
 | `G_REVIEW_BLOCK` | `/review` and `/migrate`, after adversarial pass | count of surviving CRITICAL findings over validated `Finding[]` > 0 | opus-critical |
+| `G_AUDIT` | `/audit` (brownfield), after the audit | the audit is empty (0 built, 0 gaps), OR a `built[]` item lacks `evidence.files`/`evidence.proof`, OR a gap lacks a `priority` | opus-critical |
+| `G_OPS_CONFIG` | brownfield, before sign-off | any `opsReadiness[]` item has `enforced: false` — a flag whose code default is unsafe and whose prod override was not verified (the "RLS-inert" class) | opus-critical |
+| `G_PLAN` | before `/build` of a plan | a task's acceptance is vague prose (names no file/command), OR an L/XL task bundles >1 domain, OR a `blocking` gap is addressed by no task | opus-critical |
 
 **`G_BUILD` is the centerpiece.** It does real file-existence checks over the
 design manifest plus a criteria set-diff in TypeScript — this **replaces** the
@@ -196,12 +199,21 @@ the JSON; humans read the markdown. This separation removes the brittleness of
 regex-scraping markdown for a "clarity score."
 
 `schemas/handoffs/*.json` define the contracts; `src/core/handoff/schemas.ts`
-holds the Zod equivalents. There are **nine handoff schema ids**:
+holds the Zod equivalents. There are **ten handoff schema ids**:
 
 ```
 define · design · build-task · build-report · finding ·
-claim · migration-plan · claudemd-section · kb-concept
+claim · migration-plan · claudemd-section · kb-concept · audit
 ```
+
+The `audit` handoff is the brownfield contract (added so the spine models
+audit-then-plan, not just greenfield define→design→build). It carries structured
+`built[]` (with `{evidence:{files,proof}, status, resolved_at_commit, verified_in_code}`),
+`gaps[]` (with a 3-value `priority`), `weakPoints[]`, `opsReadiness[]` (the inert-flag
+bucket `G_OPS_CONFIG` reads), `proposedTasks[]` (with `external_preconditions`/`domains`
+for cross-domain deps), and `invariants_at_risk[]`. It is driven by the separate
+`brownfield` schema (`audit → define → design`) so the greenfield `sdd` cycle is
+untouched, and exercised by the `/audit` command.
 
 The keystone command is:
 
@@ -248,7 +260,9 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js <args>
 | `spin state` | print the `run.json` ledger (`completed[]`, `retries{}`, `gates{}`) |
 | `spin complete <id> [--handoff f.json]` | validate handoff, **then** mark complete; exit 1 if invalid |
 | `spin validate <id\|path>` | structural checks (md sections / manifest table / criteria IDs); exit 0/1 |
-| `spin gate <gateId> [--agents d] [--routing f] [--findings f]` | run a named gate; exit 0 pass / 1 BLOCK with `{gate,passed,reasons,unmet}` |
+| `spin gate <gateId> [--agents d] [--routing f] [--findings f] [--handoff f] [--audit f]` | run a named gate; exit 0 pass / 1 BLOCK with `{gate,passed,reasons,unmet}` |
+| `spin reconcile --audit f.json` | doc-vs-code drift over an audit handoff — exit 1 on inconsistent/drift items |
+| `spin config-drift --declared a,b --present a` | tools required by CI but absent from the lockfile — exit 1 if any missing |
 | `spin diff-criteria --define f --build f` | set-diff DEFINE criteria vs BUILD passed → `unmet[]` |
 | `spin handoff-check <schemaId> <file.json>` | standalone handoff validation |
 | `spin retry <id> --inc \| --ok` | retry counter vs `config.build_retry_cap`; `--ok` exits 1 at ceiling |

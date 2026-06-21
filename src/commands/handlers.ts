@@ -19,11 +19,13 @@ import {
   schemaCopyPath,
 } from '../core/run/run-state.js';
 import { buildGateContext, runGate } from '../core/gates/gate-runner.js';
-import { checkHandoffFile } from '../core/handoff/handoff-check.js';
+import { checkHandoffFile, checkHandoffObject } from '../core/handoff/handoff-check.js';
 import { criteriaDiff } from '../core/validation/criteria-diff.js';
 import { validateSections, hasManifestTable, extractCriteriaIds } from '../core/validation/md-section-validator.js';
 import { route, listTaskKinds, type Budget } from '../core/model-route/policy.js';
 import { classifyTier, type TierSignals, type Risk, type Breadth } from '../core/model-route/tiers.js';
+import { reconcileAudit } from '../core/reconcile.js';
+import { configDrift } from '../core/config-drift.js';
 
 // Each handler returns a HandlerResult; the CLI prints `json` and exits `code`.
 // Exit-code ABI: 0 pass · 1 gate-blocked/invalid · 2 usage · 3 internal.
@@ -300,6 +302,59 @@ export function schemaHandler(root: string, action: string): HandlerResult {
 
 export function listTaskKindsHandler(): HandlerResult {
   return ok({ kinds: listTaskKinds() });
+}
+
+export function reconcileHandler(opts: { audit?: string }): HandlerResult {
+  if (!opts.audit) return usage('reconcile requires --audit <file>');
+  const auditPath = path.isAbsolute(opts.audit) ? opts.audit : path.join(process.cwd(), opts.audit);
+  if (!fs.existsSync(auditPath)) {
+    return usage(`audit file not found: ${auditPath}`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(auditPath, 'utf-8'));
+  } catch {
+    return usage(`audit file is not valid JSON: ${auditPath}`);
+  }
+  const check = checkHandoffObject('audit', parsed);
+  if (!check.ok) {
+    return blocked({
+      error: 'audit file does not match AuditHandoff schema',
+      schema_errors: check.errors,
+    });
+  }
+  const data = check.data as { built: Array<{
+    item: string;
+    status: 'proven' | 'partial' | 'scaffolded';
+    resolved_at_commit?: string | null;
+    verified_in_code: boolean;
+  }> };
+  const report = reconcileAudit(data);
+  const hasProblems = report.inconsistent.length > 0 || report.drift_open.length > 0;
+  const result = {
+    audit: auditPath,
+    ...report,
+    clean: !hasProblems,
+  };
+  return hasProblems ? blocked(result) : ok(result);
+}
+
+export function configDriftHandler(opts: { declared?: string; present?: string }): HandlerResult {
+  if (opts.declared === undefined) return usage('config-drift requires --declared <a,b,c>');
+  if (opts.present === undefined) return usage('config-drift requires --present <a,b>');
+
+  // Comma-split, trim whitespace, drop empty strings.
+  const declared = opts.declared
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const present = opts.present
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const report = configDrift(declared, present);
+  return report.missing.length > 0 ? blocked(report) : ok(report);
 }
 
 export { markIncomplete };

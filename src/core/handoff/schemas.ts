@@ -44,6 +44,15 @@ export const BuildReportHandoff = z.object({
     )
     .default([]),
   files_written: z.array(z.string()).default([]),
+  // Optional coverage summary — populated by CI after the test run.
+  // Purely additive; existing build-report handoffs without this field remain valid.
+  coverage: z
+    .object({
+      tool: z.string().min(1),        // e.g. "vitest", "jest", "pytest-cov"
+      pct: z.number().min(0).max(100), // measured coverage percentage
+      threshold: z.number().min(0).max(100), // project's required minimum
+    })
+    .optional(),
 });
 
 export const Severity = z.enum(['critical', 'high', 'medium', 'low']);
@@ -98,6 +107,80 @@ export const KbConceptHandoff = z.object({
   needs_decoding: z.boolean().default(false),
 });
 
+// AuditHandoff — the typed worker-output for the brownfield `audit` artifact.
+// Consolidates the dogfood improvements: structured evidence + 3-value severity
+// (I2), doc-vs-code reconciliation fields (I3), ops-readiness bucket (I4),
+// proposedTasks as the typed audit->define bridge with cross-domain deps (I7),
+// invariants-at-risk (I10) and test tiers (I9). Each `built[]` item must carry
+// evidence (files + proof) so a claim of "done" cannot be a bare prose assertion
+// — G_AUDIT enforces that.
+export const AuditHandoff = z.object({
+  domain: z.string().min(1),
+  built: z
+    .array(
+      z.object({
+        item: z.string().min(1),
+        evidence: z.object({
+          files: z.array(z.string()).default([]),
+          lines: z.string().optional(),
+          proof: z.string().default(''),
+        }),
+        status: z.enum(['proven', 'partial', 'scaffolded']),
+        resolved_at_commit: z.string().nullish(), // commit that resolved it, or null/omitted
+        verified_in_code: z.boolean().default(false),
+      })
+    )
+    .default([]),
+  gaps: z
+    .array(
+      z.object({
+        capability: z.string().min(1),
+        why: z.string().min(1),
+        priority: z.enum(['blocking', 'important', 'nice-to-have']),
+      })
+    )
+    .default([]),
+  weakPoints: z
+    .array(
+      z.object({
+        item: z.string().min(1),
+        severity: Severity,
+        evidence: z.string().min(1),
+      })
+    )
+    .default([]),
+  opsReadiness: z
+    .array(
+      z.object({
+        control: z.string().min(1),
+        code_default: z.string(),
+        prod_value_required: z.string(),
+        env_files_checked: z.array(z.string()).default([]),
+        enforced: z.boolean(),
+      })
+    )
+    .default([]),
+  proposedTasks: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        detail: z.string(),
+        effort: z.enum(['S', 'M', 'L', 'XL']),
+        dependsOn: z.string().optional(),
+        external_preconditions: z.array(z.string()).default([]),
+        domains: z.array(z.string()).default([]),
+      })
+    )
+    .default([]),
+  invariants_at_risk: z.array(z.string()).default([]),
+  test_tiers: z
+    .object({
+      unit: z.string(),
+      infra_bound: z.string(),
+    })
+    .optional(),
+});
+
 // Registry: handoff id -> Zod schema. The schema.yaml `handoff:` field names one.
 export const HANDOFF_SCHEMAS = {
   define: DefineHandoff,
@@ -109,6 +192,7 @@ export const HANDOFF_SCHEMAS = {
   'migration-plan': MigrationPlanHandoff,
   'claudemd-section': ClaudeMdSectionHandoff,
   'kb-concept': KbConceptHandoff,
+  audit: AuditHandoff,
 } as const;
 
 export type HandoffId = keyof typeof HANDOFF_SCHEMAS;

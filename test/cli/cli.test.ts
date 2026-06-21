@@ -63,6 +63,38 @@ describe('spin CLI exit-code ABI', () => {
     expect(r.json.gate).toBe('G_HANDOFF');
   });
 
+  it('gate G_AUDIT passes (exit 0) over a valid --handoff sidecar', async () => {
+    const file = `${root}/audit.json`;
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        domain: 'auth',
+        built: [
+          { item: 'RLS', evidence: { files: ['a.sql'], proof: 'ENABLE RLS' }, status: 'proven' },
+        ],
+        gaps: [{ capability: 'rate limit', why: 'unbounded', priority: 'blocking' }],
+      })
+    );
+    const r = await cli(['--root', root, 'gate', 'G_AUDIT', '--handoff', file]);
+    expect(r.code).toBe(0);
+    expect(r.json.passed).toBe(true);
+  });
+
+  it('gate G_AUDIT blocks (exit 1) when a built item lacks evidence', async () => {
+    const file = `${root}/audit.json`;
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        domain: 'auth',
+        built: [{ item: 'RLS', evidence: { files: [], proof: '' }, status: 'scaffolded' }],
+        gaps: [{ capability: 'rate limit', why: 'unbounded', priority: 'blocking' }],
+      })
+    );
+    const r = await cli(['--root', root, 'gate', 'G_AUDIT', '--handoff', file]);
+    expect(r.code).toBe(1);
+    expect(r.json.passed).toBe(false);
+  });
+
   it('schema validate passes for the bundled sdd schema', async () => {
     await cli(['--root', root, 'init', '--schema', 'sdd']);
     const r = await cli(['--root', root, 'schema', 'validate']);
