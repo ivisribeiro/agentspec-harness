@@ -1,0 +1,22 @@
+{
+  "concepts": [
+    {
+      "slug": "agents"
+    },
+    {
+      "slug": "tasks"
+    },
+    {
+      "slug": "crews"
+    },
+    {
+      "slug": "processes"
+    },
+    {
+      "slug": "tools"
+    },
+    {
+      "slug": "flows"
+    }
+  ]
+}
