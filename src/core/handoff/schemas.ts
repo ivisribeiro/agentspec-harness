@@ -55,7 +55,7 @@ export const FindingHandoff = z.object({
   findings: z.array(
     z.object({
       file: z.string().min(1),
-      line: z.number().int().nonnegative().optional(),
+      line: z.number().int().nonnegative().nullish(), // number, null (unknown line), or omitted
       severity: Severity,
       rule: z.string().min(1),
       message: z.string().min(1),

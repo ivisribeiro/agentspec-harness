@@ -20667,7 +20667,8 @@ var FindingHandoff = external_exports.object({
   findings: external_exports.array(
     external_exports.object({
       file: external_exports.string().min(1),
-      line: external_exports.number().int().nonnegative().optional(),
+      line: external_exports.number().int().nonnegative().nullish(),
+      // number, null (unknown line), or omitted
       severity: Severity,
       rule: external_exports.string().min(1),
       message: external_exports.string().min(1),
