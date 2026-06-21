@@ -92,10 +92,12 @@ shape of the architecture.
   them idempotent and crash-safe; and **`ahx complete <id> --handoff out.json`** as
   the single point where worker output is validated against a Zod schema *before*
   the artifact counts done.
-- **Proposal 3 (fidelity)** — preserve the roster intact: 58 agents + 24 KB
-  domains + deep DE surface are AgentSpec's whole reason to exist; harden control
-  flow without diluting domain depth. Also: separate the human-facing markdown
-  artifact from the machine-facing handoff sidecar the gate evaluates.
+- **Proposal 3 (fidelity)** — preserve the roster intact: AgentSpec's specialist
+  agents + 24 KB domains + deep DE surface are its whole reason to exist; harden
+  control flow without diluting domain depth. (53 specialist agents are ported
+  intact; the 5 old workflow agents are replaced by 13 typed harness workers —
+  65 routed agents in total.) Also: separate the human-facing markdown artifact
+  from the machine-facing handoff sidecar the gate evaluates.
 - **Proposal 2 (ergonomics)** — progressive adoption: commands detect `.ahx/` and
   degrade gracefully.
 
@@ -428,7 +430,7 @@ work is the seam between them.
 |---|---|---|
 | **OpenSpec** | `graph.ts` (Kahn order), `schema.ts` (loader + cycle detection), `types.ts`, `state.ts` (`detectCompleted`), `outputs.ts` | **Ported verbatim** — confirmed clean, MIT, Zod-validated, cycle-detecting. `types.ts` *extended* with `model`/`handoff`/`validate`/`parallel_group`/`config`/`gates`. |
 | **OpenSpec** | ship mechanics: `package.json` (bin `ahx`, esbuild, vitest), `tsconfig`, `build.js`, `bin/ahx.js`, `vitest.config`, CI | Ported so npx/node install works offline. |
-| **AgentSpec** | 58-agent roster, 24 KB domains, the whole DE command surface (pipeline/schema/data-quality/data-contract/lakehouse/ai-pipeline), data-engineering-guide skill, `judge.py`, plugin/marketplace manifests | **Ported intact** (only an added `output_schema` frontmatter field) — preserves domain depth, the fidelity constraint. |
+| **AgentSpec** | 53 specialist agents, 24 KB domains, the whole DE command surface (pipeline/schema/data-quality/data-contract/lakehouse/ai-pipeline), data-engineering-guide skill, `judge.py`, plugin manifest | **Ported intact** — preserves domain depth, the fidelity constraint. The 5 old workflow agents become 13 typed harness workers (`define-worker`, `build-worker`, `_adversary/challenger`, …); 65 routed agents in total. |
 | **AgentSpec** | the SDD workflow itself (`WORKFLOW_CONTRACTS.yaml`, the DEFINE/DESIGN/BUILD/SHIP templates) | Encoded as **data** in `schemas/sdd/schema.yaml` + `templates/`. The brittle parts (`build.md` topo-as-reasoning, prose retry, self-marked checkbox) are *rewritten* into gates. |
 | **ECC** | model-routing doctrine (`policy.ts`), the `_adversary/challenger` role, the `adversarial-gate` / `parallel-fanout` / `bounded-loop` skills | Ported as the **good** ECC patterns — explicitly **NOT** the fake-dispatch / `claude -p` autonomous-agent-harness skill, which is corrected by `bounded-loop`. |
 | **NEW** | the hard seam: `run-state.ts` + ledger, the gate registry + runner, `G_*` gate implementations, `criteria-diff.ts`, `handoff/` schemas + `ahx complete --handoff` enforcement, `model-route/policy.ts`, `schemas/kb`, the rewritten harness-aware commands, the harness-protocol & model-routing skills, the full E2E + grep-guard test suite | This is the testability layer — every CLI call a test can assert. |

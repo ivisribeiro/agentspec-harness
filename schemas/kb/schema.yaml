@@ -16,7 +16,7 @@ artifacts:
     generates: manifest.json
     model: sonnet
     requires: []
-    description: Concept inventory for the domain ({ concepts: [{ slug }] }).
+    description: "Concept inventory for the domain — { concepts: [{ slug }] }."
 
   - id: concepts
     generates: concept-*.md
