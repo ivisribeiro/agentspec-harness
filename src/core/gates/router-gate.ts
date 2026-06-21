@@ -18,7 +18,12 @@ function listAgentFiles(dir: string): string[] {
     for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
       const full = path.join(d, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith('.md') && !entry.name.startsWith('_')) out.push(full);
+      else if (
+        entry.name.endsWith('.md') &&
+        !entry.name.startsWith('_') &&
+        entry.name.toLowerCase() !== 'readme.md'
+      )
+        out.push(full);
     }
   }
   walk(dir);

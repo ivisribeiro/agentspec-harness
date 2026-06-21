@@ -1,6 +1,9 @@
 node_modules/
-dist/
 .ahx/
 coverage/
 *.log
 .DS_Store
+
+# dist/ IS committed — it is the self-contained bundle the plugin ships (deps
+# inlined, runs offline). Rebuild with `npm run build`.
+!dist/

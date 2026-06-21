@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Build (typecheck + bundle)
+        run: npm run build
+      - name: Test
+        run: npm test
+      - name: Coverage gate (80% on src/core)
+        run: npm run test:coverage
+
+  bundle-self-contained:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Prove the bundle runs with NO node_modules
+        run: |
+          PKG=$(mktemp -d)
+          mkdir -p "$PKG/bin" "$PKG/dist/cli" "$PKG/schemas"
+          cp bin/ahx.js "$PKG/bin/"
+          cp dist/cli/index.js "$PKG/dist/cli/"
+          cp -r schemas/* "$PKG/schemas/"
+          WORK=$(mktemp -d)
+          node "$PKG/bin/ahx.js" --root "$WORK" init --schema sdd --feature ci
+          node "$PKG/bin/ahx.js" --root "$WORK" route adversary | grep -q '"tier": "opus"'
+          # G_DEFINE must BLOCK on a fresh run (exit 1)
+          if node "$PKG/bin/ahx.js" --root "$WORK" gate G_DEFINE; then
+            echo "G_DEFINE should have blocked"; exit 1
+          fi
+          echo "bundle is self-contained and gates work"
