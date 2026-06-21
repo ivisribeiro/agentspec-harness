@@ -66,7 +66,8 @@ Copy `dist/` into your project and invoke `node dist/cli/index.js` directly. Pin
 | `spin init --schema <sdd\|kb> --feature <slug>` | Scaffold `.spindle/`, copy editable schema to `.spindle/schema.yaml`, create `run.json` | 0 / 2 |
 | `spin next` | Returns `{ ready:[{id,model,parallel_group}], blocked:{}, complete:bool }` — the ready artifact queue | 0 |
 | `spin order` | Full Kahn build order for the active schema | 0 |
-| `spin state` | Print the `run.json` ledger (`completed[]`, `retries{}`, `gates{}`) | 0 |
+| `spin state` (alias `spin status`) | Print the `run.json` ledger (`completed[]`, `retries{}`, `gates{}`) | 0 |
+| `spin explain <gateId>` | What a gate reads, what blocks it, which flags apply — no source-diving | 0 / 2 |
 | `spin complete <id> [--handoff f.json]` | Validate the worker handoff against the artifact's schema, then mark complete. **exit 1 if invalid** | 0 / 1 |
 | `spin validate <id\|path>` | Structural checks (MD sections / manifest table / criteria IDs) | 0 / 1 |
 | `spin gate <gateId> [--agents d] [--routing f] [--findings f]` | Run a named gate. exit 0 = pass, exit 1 = BLOCK with `{gate,passed,reasons,unmet}` | 0 / 1 |
@@ -77,7 +78,8 @@ Copy `dist/` into your project and invoke `node dist/cli/index.js` directly. Pin
 | `spin tier [--risk\|--breadth\|--have-context\|--mechanical\|--reversible\|--irreversible]` | Orchestration tier T0/T1/T2 — main loop / one agent / fan-out | 0 |
 | `spin reconcile --audit f.json` | Doc-vs-code drift over an audit handoff | 0 / 1 |
 | `spin config-drift --declared a,b --present a` | Tools required by CI but absent from the lockfile | 0 / 1 |
-| `spin schema show\|validate` | Inspect or validate the active editable schema | 0 / 1 |
+| `spin spec-drift --build f.json` | Acceptance criteria the build CORRECTED vs DEFINE (`corrected_spec`) — a false spec can't ride a green build | 0 / 1 |
+| `spin schema show\|validate [handoffId]` | Inspect/validate the active schema; `show <handoff-id>` describes a handoff JSON shape | 0 / 1 / 2 |
 
 **Exit-code ABI:** `0` = pass · `1` = gate blocked / handoff invalid · `2` = usage error · `3` = internal error
 

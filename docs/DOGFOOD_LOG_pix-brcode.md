@@ -1,0 +1,96 @@
+# Dogfood log — pix-brcode (greenfield SDD cycle)
+
+**Date:** 2026-06-21
+**Setup:** brand-new greenfield project `/Users/ivis/dev/pix-brcode` (a TS lib that
+generates + parses a static PIX BR Code: EMV TLV + CRC16-CCITT).
+**Method:** Spindle's SDD cycle (`define → design → build → ship`) run **autonomously**
+by a workflow — each phase agent drove the `spin` CLI itself (`spin state` / `spin next` /
+`spin complete` / `spin gate`), parked at the gate, forbidden from faking a pass.
+**Observer:** main loop did not interfere; it read the factual phase reports + the journal,
+re-ran the tests independently, and verified the PIX output against the real standard.
+
+Workflow run: `wf_0c4bc076-7e8` (task `wqqsxi2ov`). 4 agents, ~368k tokens, ~20 min.
+
+## Verdict
+**The harness held end-to-end.** 4 gates passed **honestly** (no `--force`, no run-state
+edits). The library is not just self-consistent — it is **correct against the real PIX
+standard**, independently verified by the observer:
+- `crc16("123456789")` = **29B1** (the canonical CRC-16/CCITT-FALSE check value) ✓
+- the BCB reference payload → **1D3D** ✓ (a real, correct vector)
+- a freshly generated copia-e-cola had CRC `C6A6`; recomputed independently in Python = `C6A6` ✓ → any bank would accept it.
+- 27/27 vitest tests pass (re-run by the observer, not trusting the agent's word).
+
+Gap #1 ("does the harness hold in a real run?") → **answered: it holds.**
+
+---
+
+## ⭐ The star finding (gap #2, made concrete)
+The **DEFINE phase hallucinated a factually wrong acceptance criterion**, and **G_DEFINE
+passed it** — because the gate validates *structure*, not *truth*:
+
+- `DEFINE.md` **AC-1** states: `crc16("123456789") === "1D3D"`. **This is false** — the real
+  value is `29B1` (independently confirmed). The agent confused the CCITT check value with
+  the CRC of a different payload.
+- `G_DEFINE` checked: sections present ✓, AC IDs match `/^AC-\d+$/` ✓, handoff valid ✓ →
+  **passed.** It has no way to know the CRC value is wrong. A plausible-but-false spec sailed through.
+
+What happened next is the interesting part:
+1. ✅ **The build agent CAUGHT it** — because the AC was *executable*. It implemented CRC,
+   the real value didn't match, and it **honestly documented the discrepancy** in the test
+   file (citing crccalc.com, lammertbies.nl, the RevEng catalogue).
+2. ⚠️ **It fixed the TEST but not the SPEC.** The test now correctly asserts `29B1` (+ adds a
+   real `1D3D` vector). But `DEFINE.md` line 104 **still says the wrong "1D3D" for "123456789".**
+   → **spec ↔ test/build drift**: the spec is still false, the implementation is right.
+3. ❌ **G_BUILD and G_SHIP still reported "AC-1 met" / "all 8 acceptance criteria met"** —
+   they match AC **IDs** to build results, **not the AC's literal text**. The harness
+   certified "AC-1 met" while AC-1's stated claim remains factually false.
+
+**Lesson:** executable ACs are self-healing (caught downstream — the saving grace). But the
+gate certifies AC *identity*, not AC *content*, and nothing flags a build that silently
+corrected a wrong spec. A non-executable false claim would have shipped uncaught.
+
+---
+
+## Phase-by-phase
+
+### Phase 1 — DEFINE ✅ held (with the latent bug above)
+- Drove the CLI cleanly: `spin init`→`state`→`next`→`schema show`→`order`→`validate`→
+  `handoff-check`→`complete`→`gate G_DEFINE`. Self-describing enough to navigate without source — *except* the handoff schema.
+- ⚠️ friction: prompt said `spin status`; real verb is `spin state` (exit 2). CLI suggested "Did you mean state?".
+- ⚠️ friction: the gate's handoff requirement is implicit — `next`/`state` never say "this gate also needs `.handoffs/define.json`". Learned only by reading `sdd-gates.ts`.
+- ⚠️ friction: `DefineHandoff` shape (clarity 0..1, `/^AC-\d+$/`) not surfaced by any command — only in the example JSON / source.
+
+### Phase 2 — DESIGN ✅ held
+- Clean drive; `spin schema show` revealed `[Overview, File Manifest, Decisions]` + `manifest_table:true`.
+- ⚠️ friction (repeat): `spin status` again (2nd of 4 agents to hit it). Handoff schema again only in source.
+- ⚠️ friction: md validator only recognizes `##` headers; a `### File Manifest` would silently fail the gate, undocumented.
+
+### Phase 3 — BUILD ✅ held + caught the DEFINE bug
+- Implemented zero-dep TS (crc16/tlv/generate/parse/index), 27 tests, all real-green. `G_BUILD` passed first try.
+- ⭐ caught AC-1's wrong CRC (see star finding). Honest, well-cited.
+- ⚠️ friction: circular import generate↔index resolved with `import type`; design didn't call it out.
+- ⚠️ friction: dual handoff location (`design-handoff.json` sidecar **and** `.handoffs/design.json`) — unclear which `complete` reads.
+
+### Phase 4 — SHIP ✅ held
+- `G_SHIP` cleared ("all 8 acceptance criteria met"), SHIPPED.md authored. No friction reported — but it inherited the ID-not-content certification (see ❌ above).
+
+---
+
+## Friction tally
+| # | Friction | Severity | Hits |
+|---|---|---|---|
+| F1 | `spin status` doesn't exist (verb is `state`) | low | 2/4 agents |
+| F2 | Gate's required inputs (handoff path, schema shape) not discoverable via CLI — agents read source | **high** | every phase |
+| F3 | `spin gate --help` lists flags for OTHER gates; no per-gate help | medium | 2 phases |
+| F4 | md-section validator only accepts `##`; silent fail on `###` | medium | 1 phase |
+| F5 | Dual handoff location (sidecar vs `.handoffs/`) undocumented | low | 1 phase |
+| F6 | Gate certifies AC **IDs**, not AC **content**; no spec↔build drift detection | **high (gap #2)** | structural |
+
+## Improvement candidates (→ the plan we build together)
+- ✅ **I-A (F1) — SHIPPED:** `spin status` is now an alias of `spin state`.
+- ✅ **I-B (F2) — SHIPPED:** `spin explain <GATE>` (declarative gate docs: reads / blocks_when / flags, with a coverage invariant test) + `spin schema show <handoff-id>` (Zod introspector prints the sidecar's field shape). An agent no longer reads source to learn a gate's contract.
+- ✅ **I-C (F6, the deep one) — SHIPPED:** `BuildReportHandoff.results[]` gains `corrected_spec` + `correction`; the build command-doc requires flagging a corrected AC instead of burying it in a comment; `G_SHIP` appends a `⚠ … CORRECTED …` warning; `spin spec-drift --build <f>` exits 1 until DEFINE is reconciled (and the ship command-doc runs it). A green build can no longer silently leave a false spec behind.
+- ⬜ **I-D (F4):** make the md validator's header-level failure explicit ("found '### X', gate requires '## X'"). *Deferred.*
+- ⬜ **I-E (F3/F5):** per-gate `--help` + document the dual handoff path. *Partly covered by `spin explain`; rest deferred.*
+
+**Result:** 213 tests green (24 new), `spin` guard clean, plugin bundle rebuilt. The three high-leverage gaps the dogfood surfaced are closed and verified live against the `spin` CLI.

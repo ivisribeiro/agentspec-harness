@@ -101,4 +101,70 @@ describe('spin CLI exit-code ABI', () => {
     expect(r.code).toBe(0);
     expect(r.json.valid).toBe(true);
   });
+
+  // --- dogfood improvements (I-A status alias, I-B explain/schema show, I-C spec-drift) ---
+
+  it('status is an alias of state (I-A / F1)', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const state = await cli(['--root', root, 'state']);
+    const status = await cli(['--root', root, 'status']);
+    expect(status.code).toBe(0);
+    expect(status.json).toEqual(state.json);
+  });
+
+  it('explain describes a gate (I-B / F2)', async () => {
+    const r = await cli(['--root', root, 'explain', 'G_DEFINE']);
+    expect(r.code).toBe(0);
+    expect(r.json.gate).toBe('G_DEFINE');
+    expect(r.json.handoff).toBe('define');
+    expect(Array.isArray(r.json.blocks_when)).toBe(true);
+  });
+
+  it('explain on an unknown gate exits 2 with the known list', async () => {
+    const r = await cli(['--root', root, 'explain', 'G_NOPE']);
+    expect(r.code).toBe(2);
+    expect(r.json.error).toContain('G_DEFINE');
+  });
+
+  it('schema show <handoff-id> describes the JSON shape (I-B / F2)', async () => {
+    const r = await cli(['--root', root, 'schema', 'show', 'define']);
+    expect(r.code).toBe(0);
+    expect(r.json.id).toBe('define');
+    const names = r.json.fields.map((f: any) => f.name);
+    expect(names).toContain('criteria');
+  });
+
+  it('schema show <unknown-id> exits 2', async () => {
+    const r = await cli(['--root', root, 'schema', 'show', 'bogus']);
+    expect(r.code).toBe(2);
+    expect(r.json.error).toContain('unknown handoff id');
+  });
+
+  it('spec-drift exits 0 when no criterion was corrected (I-C)', async () => {
+    const file = `${root}/build.json`;
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ feature: 'f', results: [{ criterion: 'AC-1', status: 'passed' }] })
+    );
+    const r = await cli(['--root', root, 'spec-drift', '--build', file]);
+    expect(r.code).toBe(0);
+    expect(r.json.clean).toBe(true);
+  });
+
+  it('spec-drift exits 1 and lists the corrected criterion (I-C / F6)', async () => {
+    const file = `${root}/build.json`;
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        feature: 'f',
+        results: [
+          { criterion: 'AC-1', status: 'passed', corrected_spec: true, correction: 'CRC 29B1 not 1D3D' },
+        ],
+      })
+    );
+    const r = await cli(['--root', root, 'spec-drift', '--build', file]);
+    expect(r.code).toBe(1);
+    expect(r.json.clean).toBe(false);
+    expect(r.json.drifted[0].criterion).toBe('AC-1');
+  });
 });

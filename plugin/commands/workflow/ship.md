@@ -39,7 +39,21 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js gate G_SHIP
 
 Exit 1 → STOP. Surface `reasons` and `unmet`. The define.criteria minus build.passed set is non-empty — the build did not satisfy all acceptance criteria. Report which criteria are unmet and halt.
 
-Exit 0 → continue.
+Exit 0 → continue. **Note:** G_SHIP passes even when the build flagged a
+`corrected_spec` drift, but it appends a `⚠ … CORRECTED …` line to `reasons`.
+If you see one, the spec and the implementation disagreed and the build was
+right — DEFINE.md is now stale.
+
+### 3b. Spec-drift — reconcile a corrected spec
+
+```
+node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js spec-drift --build .spindle/features/<feature>/.handoffs/build.json
+```
+
+Exit 0 → no drift; continue. Exit 1 → the build CORRECTED one or more criteria
+(`drifted[]` lists each with its `correction`). Before archiving, **update the
+DEFINE.md criterion to the correct value** so the shipped spec is true, then
+re-run. A feature must not ship with a spec its own build contradicts.
 
 ### 4. Route the ship worker
 

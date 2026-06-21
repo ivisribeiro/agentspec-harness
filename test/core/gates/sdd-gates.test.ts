@@ -155,4 +155,17 @@ describe('G_SHIP', () => {
     writeHandoff('build', { feature: 'feat', results: [{ criterion: 'AC-1', status: 'passed' }] });
     expect(gShip(ctx).passed).toBe(true);
   });
+
+  it('passes but SURFACES spec-drift when the build corrected a criterion (I-C / F6)', () => {
+    writeHandoff('define', { feature: 'feat', clarity: 1, criteria: ['AC-1'] });
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed', corrected_spec: true, correction: 'CRC 29B1 not 1D3D' },
+      ],
+    });
+    const r = gShip(ctx);
+    expect(r.passed).toBe(true); // a legitimate correction does not block ship
+    expect(r.reasons.some((x) => x.includes('CORRECTED') && x.includes('AC-1'))).toBe(true);
+  });
 });

@@ -40,6 +40,13 @@ export const BuildReportHandoff = z.object({
       z.object({
         criterion: z.string().regex(/^AC-\d+$/),
         status: z.enum(['passed', 'failed', 'skipped']),
+        // Spec-drift signal (dogfood F6): set when the build implemented this
+        // criterion DIFFERENTLY from the value DEFINE stated, because DEFINE was
+        // wrong (e.g. AC-1 said CRC "1D3D", the real value is "29B1"). Forces the
+        // correction to be EXPLICIT instead of buried in a code comment — so a
+        // green build can't silently leave a false spec behind.
+        corrected_spec: z.boolean().default(false),
+        correction: z.string().optional(), // what was wrong + the right value
       })
     )
     .default([]),

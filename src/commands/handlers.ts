@@ -26,6 +26,10 @@ import { route, listTaskKinds, type Budget } from '../core/model-route/policy.js
 import { classifyTier, type TierSignals, type Risk, type Breadth } from '../core/model-route/tiers.js';
 import { reconcileAudit } from '../core/reconcile.js';
 import { configDrift } from '../core/config-drift.js';
+import { explainGate } from '../core/gates/gate-docs.js';
+import { listGates } from '../core/gates/registry.js';
+import { describeHandoff, listHandoffIds } from '../core/handoff/describe.js';
+import { specDrift, type BuildResult } from '../core/spec-drift.js';
 
 // Each handler returns a HandlerResult; the CLI prints `json` and exits `code`.
 // Exit-code ABI: 0 pass · 1 gate-blocked/invalid · 2 usage · 3 internal.
@@ -281,9 +285,18 @@ export function tierHandler(opts: {
   return ok({ signals, decision: classifyTier(signals) });
 }
 
-export function schemaHandler(root: string, action: string): HandlerResult {
+export function schemaHandler(root: string, action: string, handoffId?: string): HandlerResult {
   const schemaPath = runStateExists(root) ? schemaCopyPath(root) : null;
   if (action === 'show') {
+    // `spin schema show <handoff-id>` describes a handoff's JSON shape so the
+    // sidecar can be authored without reading schemas.ts (dogfood F2).
+    if (handoffId) {
+      const desc = describeHandoff(handoffId);
+      if (!desc) {
+        return usage(`unknown handoff id "${handoffId}" (known: ${listHandoffIds().join(', ')})`);
+      }
+      return ok(desc);
+    }
     if (!schemaPath || !fs.existsSync(schemaPath)) return usage('no active schema — run "spin init"');
     return ok(loadSchema(schemaPath));
   }
@@ -355,6 +368,41 @@ export function configDriftHandler(opts: { declared?: string; present?: string }
 
   const report = configDrift(declared, present);
   return report.missing.length > 0 ? blocked(report) : ok(report);
+}
+
+export function explainHandler(gateId: string): HandlerResult {
+  const doc = explainGate(gateId);
+  if (!doc) {
+    return usage(`unknown gate "${gateId}" (known: ${listGates().join(', ')})`);
+  }
+  return ok(doc);
+}
+
+export function specDriftHandler(root: string, opts: { build?: string }): HandlerResult {
+  if (!opts.build) return usage('spec-drift requires --build <build-report.json>');
+  const buildPath = path.isAbsolute(opts.build) ? opts.build : path.join(root, opts.build);
+  if (!fs.existsSync(buildPath)) {
+    return usage(`build report not found: ${buildPath}`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(buildPath, 'utf-8'));
+  } catch {
+    return usage(`build report is not valid JSON: ${buildPath}`);
+  }
+  // Validate against the build-report schema so a malformed file fails loudly
+  // rather than reading as "no drift".
+  const check = checkHandoffObject('build-report', parsed);
+  if (!check.ok) {
+    return blocked({
+      error: 'build report does not match BuildReportHandoff schema',
+      schema_errors: check.errors,
+    });
+  }
+  const results = (check.data as { results?: BuildResult[] }).results ?? [];
+  const report = specDrift(results);
+  const result = { build: buildPath, ...report };
+  return report.clean ? ok(result) : blocked(result);
 }
 
 export { markIncomplete };

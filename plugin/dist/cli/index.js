@@ -20657,7 +20657,15 @@ var BuildReportHandoff = external_exports.object({
   results: external_exports.array(
     external_exports.object({
       criterion: external_exports.string().regex(/^AC-\d+$/),
-      status: external_exports.enum(["passed", "failed", "skipped"])
+      status: external_exports.enum(["passed", "failed", "skipped"]),
+      // Spec-drift signal (dogfood F6): set when the build implemented this
+      // criterion DIFFERENTLY from the value DEFINE stated, because DEFINE was
+      // wrong (e.g. AC-1 said CRC "1D3D", the real value is "29B1"). Forces the
+      // correction to be EXPLICIT instead of buried in a code comment — so a
+      // green build can't silently leave a false spec behind.
+      corrected_spec: external_exports.boolean().default(false),
+      correction: external_exports.string().optional()
+      // what was wrong + the right value
     })
   ).default([]),
   files_written: external_exports.array(external_exports.string()).default([]),
@@ -20819,6 +20827,15 @@ function checkHandoffFile(schemaId, filePath) {
   return checkHandoffObject(schemaId, parsed);
 }
 
+// src/core/spec-drift.ts
+function specDrift(results) {
+  const drifted = results.filter((r) => r.corrected_spec === true).map((r) => ({
+    criterion: r.criterion,
+    correction: r.correction ?? "(no correction note provided)"
+  }));
+  return { drifted, clean: drifted.length === 0 };
+}
+
 // src/core/gates/sdd-gates.ts
 function readIfExists(p) {
   try {
@@ -20948,7 +20965,14 @@ function gShip(ctx) {
       diff.unmet
     );
   }
-  return pass(gate, [`all ${define.criteria.length} acceptance criteria met`]);
+  const reasons = [`all ${define.criteria.length} acceptance criteria met`];
+  const drift = specDrift(buildRes?.results ?? []);
+  if (!drift.clean) {
+    reasons.push(
+      `\u26A0 ${drift.drifted.length} acceptance criterion/criteria were CORRECTED during build \u2014 reconcile DEFINE.md: ${drift.drifted.map((d) => `${d.criterion} (${d.correction})`).join("; ")} \u2014 run: spin spec-drift --build <build-report.json>`
+    );
+  }
+  return pass(gate, reasons);
 }
 function safeJson(filePath) {
   try {
@@ -21674,6 +21698,229 @@ function configDrift(declared, present) {
   return { missing };
 }
 
+// src/core/gates/gate-docs.ts
+var GATE_DOCS = {
+  G_DEFINE: {
+    gate: "G_DEFINE",
+    purpose: "Gate before /design: the requirements artifact is structurally complete.",
+    reads: [
+      "DEFINE.md in the feature dir (sections: ## Why, ## What, ## Acceptance Criteria)",
+      "the canonical .handoffs/define.json sidecar (written by `spin complete define --handoff`)"
+    ],
+    handoff: "define",
+    blocks_when: [
+      "DEFINE.md missing on disk",
+      "any required ## section absent or empty",
+      "define handoff missing or invalid against the DefineHandoff schema"
+    ],
+    flags: []
+  },
+  G_DESIGN: {
+    gate: "G_DESIGN",
+    purpose: "Gate before /build: the technical design + file manifest are present.",
+    reads: [
+      "DESIGN.md (sections: ## Overview, ## File Manifest, ## Decisions) + a markdown manifest table",
+      "the canonical .handoffs/design.json sidecar"
+    ],
+    handoff: "design",
+    blocks_when: [
+      "DESIGN.md missing on disk",
+      "any required ## section absent or empty",
+      "no file-manifest table found",
+      "design handoff invalid against the DesignHandoff schema"
+    ],
+    flags: []
+  },
+  G_BUILD: {
+    gate: "G_BUILD",
+    purpose: "Gate before /ship: every manifest file exists and every acceptance criterion is satisfied.",
+    reads: [
+      "BUILD_REPORT.md in the feature dir",
+      ".handoffs/design.json (each manifest file must exist on disk, repo-relative)",
+      ".handoffs/define.json (the acceptance criteria) and .handoffs/build.json (the build results)"
+    ],
+    handoff: "build-report",
+    blocks_when: [
+      "BUILD_REPORT.md missing",
+      "a file from the design manifest was not built",
+      "an acceptance criterion from DEFINE is not marked passed in the build results"
+    ],
+    flags: []
+  },
+  G_SHIP: {
+    gate: "G_SHIP",
+    purpose: "Final certification inside /ship: define.criteria minus build.passed must be empty.",
+    reads: [".handoffs/define.json (criteria)", ".handoffs/build.json (results, incl. corrected_spec flags)"],
+    handoff: "build-report",
+    blocks_when: ["any acceptance criterion in DEFINE is not satisfied by the build results"],
+    flags: []
+  },
+  G_KB_STRUCTURE: {
+    gate: "G_KB_STRUCTURE",
+    purpose: "KB domain has the required scaffolding and at least one concept.",
+    reads: ["the KB domain dir: index.md, quick-reference.md, manifest.json, and concept-*.md files"],
+    blocks_when: ["index.md / quick-reference.md / manifest.json missing", "no concept-*.md files"],
+    flags: []
+  },
+  G_KB_COVERAGE: {
+    gate: "G_KB_COVERAGE",
+    purpose: "Every concept the manifest promises has a file and enough test_cases.",
+    reads: ["manifest.json (the promised concepts)", "each concept-*.md and its kb-concept handoff"],
+    handoff: "kb-concept",
+    blocks_when: ["a manifest concept has no file", "a concept has fewer than the required test_cases"],
+    flags: []
+  },
+  G_ROUTER_COVERAGE: {
+    gate: "G_ROUTER_COVERAGE",
+    purpose: "Bijection between the agent roster and the routing table \u2014 no silent skips.",
+    reads: ["the agents dir (--agents)", "the routing.json (--routing)"],
+    blocks_when: [
+      "an agent frontmatter fails to parse",
+      "an agent is missing from routing, or routing lists an agent that does not exist"
+    ],
+    flags: ["--agents <dir> (required)", "--routing <file> (required)"]
+  },
+  G_REVIEW_BLOCK: {
+    gate: "G_REVIEW_BLOCK",
+    purpose: "Block on surviving CRITICAL findings after the adversarial pass (shared by /review, /migrate).",
+    reads: ["the findings.json (--findings), validated as a Finding[]"],
+    handoff: "finding",
+    blocks_when: [
+      'any finding with severity "critical" survives',
+      'the findings file has the wrong shape (not an object with a "findings" array)'
+    ],
+    flags: ["--findings <file> (required)"]
+  },
+  G_AUDIT: {
+    gate: "G_AUDIT",
+    purpose: "The brownfield audit inventory is evidence-backed (built items prove themselves).",
+    reads: ["the audit handoff: --handoff <file>, else .handoffs/audit.json"],
+    handoff: "audit",
+    blocks_when: [
+      "an empty audit (zero built AND zero gaps)",
+      "a built[] item missing evidence.files or evidence.proof",
+      "a gap without a valid priority"
+    ],
+    flags: ["--handoff <file> (optional; defaults to .handoffs/audit.json)"]
+  },
+  G_OPS_CONFIG: {
+    gate: "G_OPS_CONFIG",
+    purpose: 'No ops-readiness control is "coded but inert in prod" (enforced=false).',
+    reads: ["the audit handoff opsReadiness[]: --audit <file>, else .handoffs/audit.json"],
+    handoff: "audit",
+    blocks_when: ["any opsReadiness item has enforced=false (a flag coded but off in prod)"],
+    flags: ["--audit <file> (optional; defaults to .handoffs/audit.json)"]
+  },
+  G_PLAN: {
+    gate: "G_PLAN",
+    purpose: "Plan quality: no vague task, no over-bundled task, no orphaned blocking gap.",
+    reads: ["the audit handoff proposedTasks[] + gaps[]: --audit <file>, else .handoffs/audit.json"],
+    handoff: "audit",
+    blocks_when: [
+      "a task whose detail has no falsifiable signal (no file-path or command token)",
+      "an L/XL task spanning more than one domain",
+      'a "blocking" gap addressed by no proposed task'
+    ],
+    flags: ["--audit <file> (optional; defaults to .handoffs/audit.json)"]
+  }
+};
+function explainGate(id) {
+  return GATE_DOCS[id] ?? null;
+}
+
+// src/core/handoff/describe.ts
+function unwrap(t) {
+  let core = t;
+  let required = true;
+  let def;
+  for (; ; ) {
+    const name = core._def?.typeName;
+    if (name === "ZodOptional") {
+      required = false;
+      core = core._def.innerType;
+    } else if (name === "ZodDefault") {
+      required = false;
+      const d = core._def;
+      try {
+        def = d.defaultValue();
+      } catch {
+      }
+      core = d.innerType;
+    } else if (name === "ZodNullable") {
+      core = core._def.innerType;
+    } else {
+      break;
+    }
+  }
+  return { core, required, default: def };
+}
+function stringConstraints(t) {
+  const checks = t._def.checks ?? [];
+  const out = [];
+  for (const c of checks) {
+    if (c.kind === "regex" && c.regex) out.push(`matches ${c.regex.toString()}`);
+    else if (c.kind === "min") out.push(`min length ${c.value}`);
+    else if (c.kind === "max") out.push(`max length ${c.value}`);
+    else if (c.kind === "email") out.push("email");
+    else out.push(c.kind);
+  }
+  return out;
+}
+function numberConstraints(t) {
+  const checks = t._def.checks ?? [];
+  return checks.map((c) => c.value !== void 0 ? `${c.kind} ${c.value}` : c.kind);
+}
+function describeCore(core) {
+  const name = core._def?.typeName;
+  switch (name) {
+    case "ZodString": {
+      const constraints = stringConstraints(core);
+      return { type: "string", ...constraints.length ? { constraints } : {} };
+    }
+    case "ZodNumber": {
+      const constraints = numberConstraints(core);
+      return { type: "number", ...constraints.length ? { constraints } : {} };
+    }
+    case "ZodBoolean":
+      return { type: "boolean" };
+    case "ZodEnum":
+      return { type: "enum", enumValues: core._def.values };
+    case "ZodArray": {
+      const el = unwrap(core._def.type);
+      const elDesc = describeCore(el.core);
+      return { type: `array<${elDesc.type}>`, ...elDesc.fields ? { fields: elDesc.fields } : {} };
+    }
+    case "ZodObject":
+      return { type: "object", fields: describeObject(core) };
+    default:
+      return { type: name ? name.replace(/^Zod/, "").toLowerCase() : "unknown" };
+  }
+}
+function describeObject(obj) {
+  const shape = obj.shape;
+  return Object.entries(shape).map(([fname, ztype]) => {
+    const u = unwrap(ztype);
+    const core = describeCore(u.core);
+    return {
+      name: fname,
+      type: core.type,
+      required: u.required,
+      ...core.constraints ? { constraints: core.constraints } : {},
+      ...core.enumValues ? { enumValues: core.enumValues } : {},
+      ...u.default !== void 0 ? { default: u.default } : {},
+      ...core.fields ? { fields: core.fields } : {}
+    };
+  });
+}
+function describeHandoff(id) {
+  if (!isHandoffId(id)) return null;
+  const schema = HANDOFF_SCHEMAS[id];
+  return { id, fields: describeObject(schema) };
+}
+function listHandoffIds() {
+  return Object.keys(HANDOFF_SCHEMAS).sort();
+}
+
 // src/commands/handlers.ts
 function ok(json) {
   return { code: 0, json };
@@ -21871,9 +22118,16 @@ function tierHandler(opts) {
   };
   return ok({ signals, decision: classifyTier(signals) });
 }
-function schemaHandler(root, action) {
+function schemaHandler(root, action, handoffId) {
   const schemaPath = runStateExists(root) ? schemaCopyPath(root) : null;
   if (action === "show") {
+    if (handoffId) {
+      const desc = describeHandoff(handoffId);
+      if (!desc) {
+        return usage(`unknown handoff id "${handoffId}" (known: ${listHandoffIds().join(", ")})`);
+      }
+      return ok(desc);
+    }
     if (!schemaPath || !fs14.existsSync(schemaPath)) return usage('no active schema \u2014 run "spin init"');
     return ok(loadSchema(schemaPath));
   }
@@ -21929,6 +22183,37 @@ function configDriftHandler(opts) {
   const report = configDrift(declared, present);
   return report.missing.length > 0 ? blocked(report) : ok(report);
 }
+function explainHandler(gateId) {
+  const doc = explainGate(gateId);
+  if (!doc) {
+    return usage(`unknown gate "${gateId}" (known: ${listGates().join(", ")})`);
+  }
+  return ok(doc);
+}
+function specDriftHandler(root, opts) {
+  if (!opts.build) return usage("spec-drift requires --build <build-report.json>");
+  const buildPath = path9.isAbsolute(opts.build) ? opts.build : path9.join(root, opts.build);
+  if (!fs14.existsSync(buildPath)) {
+    return usage(`build report not found: ${buildPath}`);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(fs14.readFileSync(buildPath, "utf-8"));
+  } catch {
+    return usage(`build report is not valid JSON: ${buildPath}`);
+  }
+  const check = checkHandoffObject("build-report", parsed);
+  if (!check.ok) {
+    return blocked({
+      error: "build report does not match BuildReportHandoff schema",
+      schema_errors: check.errors
+    });
+  }
+  const results = check.data.results ?? [];
+  const report = specDrift(results);
+  const result = { build: buildPath, ...report };
+  return report.clean ? ok(result) : blocked(result);
+}
 
 // src/cli/index.ts
 async function runCli(argv, write = (chunk) => process.stdout.write(chunk)) {
@@ -21944,7 +22229,7 @@ async function runCli(argv, write = (chunk) => process.stdout.write(chunk)) {
   program2.command("init").option("--schema <name>", "workflow schema (sdd | kb)", "sdd").option("--feature <slug>", "feature slug", "feature").action(function(opts) {
     emit(initHandler(root(this), opts));
   });
-  program2.command("state").action(function() {
+  program2.command("state").alias("status").action(function() {
     emit(stateHandler(root(this)));
   });
   program2.command("next").action(function() {
@@ -21986,8 +22271,16 @@ async function runCli(argv, write = (chunk) => process.stdout.write(chunk)) {
   program2.command("kinds").description("list known routing task-kinds").action(function() {
     emit(listTaskKindsHandler());
   });
-  program2.command("schema <action>").description("show | validate the active workflow schema").action(function(action) {
-    emit(schemaHandler(root(this), action));
+  program2.command("schema <action> [handoffId]").description("show | validate the active workflow schema; `show <handoff-id>` describes a handoff JSON shape").action(function(action, handoffId) {
+    emit(schemaHandler(root(this), action, handoffId));
+  });
+  program2.command("explain <gateId>").description("explain what a gate reads, what blocks it, and which flags apply").action(function(gateId) {
+    emit(explainHandler(gateId));
+  });
+  program2.command("spec-drift").description(
+    "surface acceptance criteria the build CORRECTED vs DEFINE (exit 1 if any spec drift is unreconciled)"
+  ).requiredOption("--build <file>", "build-report handoff JSON").action(function(opts) {
+    emit(specDriftHandler(root(this), opts));
   });
   program2.command("reconcile").description("detect doc-vs-code drift in an audit handoff (exit 1 if inconsistent/drift items exist)").requiredOption("--audit <file>", "audit handoff JSON to reconcile").action(function(opts) {
     emit(reconcileHandler(opts));

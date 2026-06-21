@@ -4,6 +4,7 @@ import { type GateContext, type GateResult, pass, block } from './types.js';
 import { validateSections, hasManifestTable } from '../validation/md-section-validator.js';
 import { criteriaDiff } from '../validation/criteria-diff.js';
 import { checkHandoffFile } from '../handoff/handoff-check.js';
+import { specDrift } from '../spec-drift.js';
 
 // The SDD gates. These replace AgentSpec build.md's prose "max 3 retry" and the
 // self-marked checkbox quality gate with deterministic, testable checks.
@@ -102,7 +103,7 @@ interface DefineCriteria {
   criteria?: string[];
 }
 interface BuildResults {
-  results?: Array<{ criterion: string; status: string }>;
+  results?: Array<{ criterion: string; status: string; corrected_spec?: boolean; correction?: string }>;
 }
 
 /** G_BUILD — before /ship. Replaces the prose checkbox + max-3-retry. */
@@ -175,7 +176,19 @@ export function gShip(ctx: GateContext): GateResult {
       diff.unmet
     );
   }
-  return pass(gate, [`all ${define.criteria.length} acceptance criteria met`]);
+  // Criteria are met — but surface any spec-drift the build flagged (F6). Shipping
+  // is allowed (the correction is legitimate), yet the warning is recorded loudly
+  // in the gate reasons + run-state so a false DEFINE can't ride along unnoticed.
+  const reasons = [`all ${define.criteria.length} acceptance criteria met`];
+  const drift = specDrift(buildRes?.results ?? []);
+  if (!drift.clean) {
+    reasons.push(
+      `⚠ ${drift.drifted.length} acceptance criterion/criteria were CORRECTED during build — reconcile DEFINE.md: ${drift.drifted
+        .map((d) => `${d.criterion} (${d.correction})`)
+        .join('; ')} — run: spin spec-drift --build <build-report.json>`
+    );
+  }
+  return pass(gate, reasons);
 }
 
 function safeJson<T>(filePath: string): T | null {

@@ -21,6 +21,22 @@ describe('handoff contracts', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('build-report accepts the corrected_spec drift fields, and stays backward-compatible without them (I-C)', () => {
+    const withDrift = checkHandoffObject('build-report', {
+      feature: 'auth',
+      results: [{ criterion: 'AC-1', status: 'passed', corrected_spec: true, correction: '29B1 not 1D3D' }],
+    });
+    expect(withDrift.ok).toBe(true);
+
+    const legacy = checkHandoffObject('build-report', {
+      feature: 'auth',
+      results: [{ criterion: 'AC-1', status: 'passed' }],
+    });
+    expect(legacy.ok).toBe(true);
+    // corrected_spec defaults to false when omitted
+    expect((legacy.data as any).results[0].corrected_spec).toBe(false);
+  });
+
   it('accepts a valid design handoff with a manifest', () => {
     const r = checkHandoffObject('design', {
       feature: 'auth',

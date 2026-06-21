@@ -143,8 +143,24 @@ Once every build unit has passed `spin complete`, assemble the phase-level
 ```
 
 `results[]` is the per-criterion roll-up across all `build-task` handoffs;
-`files_written[]` is the union of every file the workers wrote. Persist it as
-the BUILD_REPORT, then complete the build artifact through the CLI:
+`files_written[]` is the union of every file the workers wrote.
+
+**Spec-drift honesty (the AC-content rule).** A gate certifies a criterion *ID*,
+not its *text*. If, while building, a worker finds that a criterion's stated
+value in DEFINE was **wrong** and implements the correct value instead, it MUST
+flag that on the result — never bury the correction in a code comment:
+
+```json
+{ "criterion": "AC-1", "status": "passed",
+  "corrected_spec": true,
+  "correction": "DEFINE said CRC \"1D3D\"; the real CRC-16/CCITT-FALSE of \"123456789\" is \"29B1\"" }
+```
+
+This is what stops a green build from silently leaving a false spec behind
+(the pix-brcode dogfood finding). `G_SHIP` surfaces these, and
+`spin spec-drift --build <report>` exits 1 until DEFINE.md is reconciled.
+
+Persist the report as the BUILD_REPORT, then complete the build artifact through the CLI:
 
 ```bash
 spin complete build --handoff .spindle/features/<feature>/.handoffs/build-report.json

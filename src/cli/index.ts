@@ -18,6 +18,8 @@ import {
   listTaskKindsHandler,
   reconcileHandler,
   configDriftHandler,
+  explainHandler,
+  specDriftHandler,
   type HandlerResult,
 } from '../commands/handlers.js';
 
@@ -58,6 +60,7 @@ export async function runCli(
 
   program
     .command('state')
+    .alias('status') // `status` is the conventional verb; agents reach for it first (dogfood F1)
     .action(function (this: Command) {
       emit(stateHandler(root(this)));
     });
@@ -154,10 +157,27 @@ export async function runCli(
     });
 
   program
-    .command('schema <action>')
-    .description('show | validate the active workflow schema')
-    .action(function (this: Command, action) {
-      emit(schemaHandler(root(this), action));
+    .command('schema <action> [handoffId]')
+    .description('show | validate the active workflow schema; `show <handoff-id>` describes a handoff JSON shape')
+    .action(function (this: Command, action, handoffId) {
+      emit(schemaHandler(root(this), action, handoffId));
+    });
+
+  program
+    .command('explain <gateId>')
+    .description('explain what a gate reads, what blocks it, and which flags apply')
+    .action(function (this: Command, gateId) {
+      emit(explainHandler(gateId));
+    });
+
+  program
+    .command('spec-drift')
+    .description(
+      'surface acceptance criteria the build CORRECTED vs DEFINE (exit 1 if any spec drift is unreconciled)'
+    )
+    .requiredOption('--build <file>', 'build-report handoff JSON')
+    .action(function (this: Command, opts) {
+      emit(specDriftHandler(root(this), opts));
     });
 
   program

@@ -257,19 +257,21 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js <args>
 | `spin init --schema <sdd\|kb> --feature <slug>` | scaffold `.spindle/`, copy editable schema, create `run.json` |
 | `spin next` | `{ ready:[{id,model,parallel_group}], blocked:{}, complete:bool }` |
 | `spin order` | full Kahn build order (inspection/debug) |
-| `spin state` | print the `run.json` ledger (`completed[]`, `retries{}`, `gates{}`) |
+| `spin state` (alias `spin status`) | print the `run.json` ledger (`completed[]`, `retries{}`, `gates{}`) |
+| `spin explain <gateId>` | what a gate reads, what blocks it, which flags apply (so no source-diving) |
 | `spin complete <id> [--handoff f.json]` | validate handoff, **then** mark complete; exit 1 if invalid |
 | `spin validate <id\|path>` | structural checks (md sections / manifest table / criteria IDs); exit 0/1 |
 | `spin gate <gateId> [--agents d] [--routing f] [--findings f] [--handoff f] [--audit f]` | run a named gate; exit 0 pass / 1 BLOCK with `{gate,passed,reasons,unmet}` |
 | `spin reconcile --audit f.json` | doc-vs-code drift over an audit handoff — exit 1 on inconsistent/drift items |
 | `spin config-drift --declared a,b --present a` | tools required by CI but absent from the lockfile — exit 1 if any missing |
+| `spin spec-drift --build f.json` | acceptance criteria the build CORRECTED vs DEFINE (`corrected_spec`) — exit 1 if a false spec is unreconciled |
 | `spin diff-criteria --define f --build f` | set-diff DEFINE criteria vs BUILD passed → `unmet[]` |
 | `spin handoff-check <schemaId> <file.json>` | standalone handoff validation |
 | `spin retry <id> --inc \| --ok` | retry counter vs `config.build_retry_cap`; `--ok` exits 1 at ceiling |
 | `spin route <taskKind> [--budget std\|low]` | model tier for an agent: `{ tier, model, reason }` |
 | `spin tier [--risk \| --breadth \| --have-context \| --mechanical \| --reversible \| --irreversible]` | orchestration tier T0/T1/T2 — how much orchestration the whole task deserves (main loop / one agent / fan-out) |
 | `spin kinds` | list the known routing task-kinds |
-| `spin schema show\|validate` | inspect / Zod-validate the active editable schema |
+| `spin schema show\|validate [handoffId]` | inspect / Zod-validate the active schema; `show <handoff-id>` describes a handoff JSON shape |
 
 **Exit-code ABI (commands branch on this):**
 
