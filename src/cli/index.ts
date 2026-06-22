@@ -8,6 +8,7 @@ import {
   orderHandler,
   completeHandler,
   traceHandler,
+  budgetHandler,
   validateHandler,
   gateHandler,
   diffCriteriaHandler,
@@ -84,6 +85,14 @@ export async function runCli(
     .description('print the recorded run-ledger timeline + a tier/token summary (pure read, exit 0)')
     .action(function (this: Command) {
       emit(traceHandler(root(this)));
+    });
+
+  program
+    .command('budget')
+    .description('reconcile reported token spend per tier against an optional ceiling (advisory; always exit 0)')
+    .option('--max-tokens <n>', 'advisory ceiling; sets over_budget when reported spend exceeds it')
+    .action(function (this: Command, opts) {
+      emit(budgetHandler(root(this), opts));
     });
 
   program

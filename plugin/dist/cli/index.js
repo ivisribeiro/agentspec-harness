@@ -22195,6 +22195,49 @@ function traceHandler(root) {
     }
   });
 }
+function budgetHandler(root, opts) {
+  if (!runStateExists(root)) return usage('no run state \u2014 run "spin init" first');
+  let max = null;
+  if (opts.maxTokens !== void 0) {
+    const n = Number(opts.maxTokens);
+    if (!Number.isFinite(n) || n < 0) return usage("--max-tokens must be a non-negative number");
+    max = Math.floor(n);
+  }
+  const state = loadRunState(root);
+  const completes = state.events.filter(
+    (e) => e.kind === "complete"
+  );
+  const byTier = {};
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let anyReported = false;
+  for (const c of completes) {
+    const tier = c.usage?.tier ?? "unreported";
+    const bucket = byTier[tier] ??= { completions: 0, tokens_in: 0, tokens_out: 0 };
+    bucket.completions += 1;
+    if (c.usage?.tokens_in != null) {
+      bucket.tokens_in += c.usage.tokens_in;
+      tokensIn += c.usage.tokens_in;
+      anyReported = true;
+    }
+    if (c.usage?.tokens_out != null) {
+      bucket.tokens_out += c.usage.tokens_out;
+      tokensOut += c.usage.tokens_out;
+      anyReported = true;
+    }
+  }
+  const total = tokensIn + tokensOut;
+  const overBudget = max != null && anyReported && total > max;
+  return ok({
+    feature: state.feature,
+    reported: anyReported ? { tokens_in: tokensIn, tokens_out: tokensOut, total } : null,
+    by_tier: byTier,
+    max_tokens: max,
+    over_budget: overBudget,
+    advisory: true,
+    warning: overBudget ? `reported spend ${total} tokens exceeds the declared budget of ${max} \u2014 advisory only, not enforced` : null
+  });
+}
 function nextHandler(root) {
   if (!runStateExists(root)) return usage('no run state \u2014 run "spin init" first');
   const graph = activeGraph(root);
@@ -22487,6 +22530,9 @@ async function runCli(argv, write = (chunk) => process.stdout.write(chunk)) {
   });
   program2.command("trace").description("print the recorded run-ledger timeline + a tier/token summary (pure read, exit 0)").action(function() {
     emit(traceHandler(root(this)));
+  });
+  program2.command("budget").description("reconcile reported token spend per tier against an optional ceiling (advisory; always exit 0)").option("--max-tokens <n>", "advisory ceiling; sets over_budget when reported spend exceeds it").action(function(opts) {
+    emit(budgetHandler(root(this), opts));
   });
   program2.command("complete <id>").option("--handoff <file>", "worker-output JSON sidecar to validate").action(function(id, opts) {
     emit(completeHandler(root(this), id, opts));
