@@ -75,3 +75,12 @@ fall back to `/review`:
   or in `.spindle/codex.env` (gitignored).
 - The codex invocation is model-side; `src/` stays pure (the model-free guard enforces it).
 - This is one independent reviewer that raises the bar — not a proof of correctness.
+
+## Verified end-to-end
+
+Proven against a real codex CLI (`codex-cli 0.141.0`, model `gpt-5.5`): given a file with a
+planted SQL injection + hardcoded secret, codex returned a clean JSON finding array flagging
+the injection as `critical`. Adapted into a `source: codex` sidecar, it fed `spin gate
+G_REVIEW_BLOCK`, which **blocked** on the surviving CRITICAL (and `--min-sources 2` blocked
+with `insufficient-sources`, the independence floor). The deterministic gate — not codex — is
+the judge of record.
