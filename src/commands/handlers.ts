@@ -31,6 +31,7 @@ import { explainGate } from '../core/gates/gate-docs.js';
 import { listGates } from '../core/gates/registry.js';
 import { describeHandoff, listHandoffIds } from '../core/handoff/describe.js';
 import { specDrift, type BuildResult } from '../core/spec-drift.js';
+import { runEvalCorpus } from '../core/eval/eval.js';
 
 // Each handler returns a HandlerResult; the CLI prints `json` and exits `code`.
 // Exit-code ABI: 0 pass · 1 gate-blocked/invalid · 2 usage · 3 internal.
@@ -472,6 +473,24 @@ export function specDriftHandler(root: string, opts: { build?: string }): Handle
   const report = specDrift(results);
   const result = { build: buildPath, ...report };
   return report.clean ? ok(result) : blocked(result);
+}
+
+export function evalHandler(opts: { corpus?: string; strict?: boolean }): HandlerResult {
+  const corpus = opts.corpus
+    ? path.isAbsolute(opts.corpus)
+      ? opts.corpus
+      : path.join(process.cwd(), opts.corpus)
+    : path.join(packageRoot(), 'schemas', 'evals');
+  if (!fs.existsSync(corpus)) {
+    return usage(`eval corpus not found: ${corpus}`);
+  }
+  const report = runEvalCorpus(corpus);
+  // A verdict regression (a gate no longer blocks/passes as recorded) always fails.
+  // --strict additionally fails when the corpus does not cover every registry gate
+  // with both a pass and a block case (the fail-closed completeness discipline).
+  const coverageIncomplete = opts.strict === true && !report.coverage.complete;
+  const fail = report.regressions.length > 0 || coverageIncomplete;
+  return fail ? blocked(report) : ok(report);
 }
 
 export { markIncomplete };

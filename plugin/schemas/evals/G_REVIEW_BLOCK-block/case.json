@@ -1,0 +1,7 @@
+{
+  "id": "G_REVIEW_BLOCK-block",
+  "gate": "G_REVIEW_BLOCK",
+  "expect": "block",
+  "args": { "findings": "findings.json" },
+  "note": "a surviving CRITICAL finding must block the merge"
+}

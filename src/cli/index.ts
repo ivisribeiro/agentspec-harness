@@ -21,6 +21,7 @@ import {
   configDriftHandler,
   explainHandler,
   specDriftHandler,
+  evalHandler,
   type HandlerResult,
 } from '../commands/handlers.js';
 
@@ -194,6 +195,17 @@ export async function runCli(
     .requiredOption('--audit <file>', 'audit handoff JSON to reconcile')
     .action(function (this: Command, opts) {
       emit(reconcileHandler(opts));
+    });
+
+  program
+    .command('eval')
+    .description(
+      'replay the eval corpus through the real gates; exit 1 on any verdict regression (--strict also requires every gate to have a pass+block case)'
+    )
+    .option('--corpus <dir>', 'eval corpus dir (default: bundled schemas/evals)')
+    .option('--strict', 'also fail if any registry gate lacks a pass+block fixture')
+    .action(function (this: Command, opts) {
+      emit(evalHandler(opts));
     });
 
   program

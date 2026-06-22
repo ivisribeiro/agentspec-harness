@@ -18,7 +18,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "guard": "node scripts/guard-no-model-calls.js",
-    "guard:authorship": "node scripts/guard-no-fork-tells.js"
+    "guard:authorship": "node scripts/guard-no-fork-tells.js",
+    "eval": "node dist/cli/index.js eval"
   },
   "engines": {
     "node": ">=18"
