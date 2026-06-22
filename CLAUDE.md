@@ -117,7 +117,7 @@ between `src/`+`schemas/` and `plugin/`.
 | Command | Returns / effect |
 |---|---|
 | `spin init --schema <sdd\|kb> --feature <slug>` | scaffold `.spindle/`, copy the editable schema, create `run.json` |
-| `spin next` | `{ ready:[{id,model,parallel_group}], blocked:{}, complete:bool }` |
+| `spin next` | `{ ready:[{id,model,parallel_group}], blocked:{}, gate_blocked:{}, detected_on_disk:[], complete:bool }` — ledger-authoritative + gate-aware (file existence alone never makes an artifact `ready`) |
 | `spin order` | full Kahn build order |
 | `spin trace` | the run-ledger timeline (`events[]`) + a tier/token summary. Pure read, exit 0 — a report, not a gate |
 | `spin eval [--corpus d] [--strict]` | replay the eval corpus through the REAL gates; exit 1 on a verdict regression (`--strict` also requires every gate to have a pass+block case) |
