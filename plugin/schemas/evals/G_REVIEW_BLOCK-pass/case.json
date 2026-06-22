@@ -1,0 +1,7 @@
+{
+  "id": "G_REVIEW_BLOCK-pass",
+  "gate": "G_REVIEW_BLOCK",
+  "expect": "pass",
+  "args": { "findings": "findings.json" },
+  "note": "findings present but none survive at CRITICAL severity"
+}

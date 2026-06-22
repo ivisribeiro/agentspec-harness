@@ -1,0 +1,12 @@
+{
+  "domain": "core",
+  "proposedTasks": [
+    {
+      "title": "clean it up",
+      "detail": "make it better and more robust overall",
+      "effort": "S",
+      "domains": []
+    }
+  ],
+  "gaps": []
+}

@@ -1,7 +1,7 @@
 {
   "name": "spindle",
   "version": "0.1.0",
-  "description": "AgentSpec made harness-native: a deterministic, testable orchestration spine (the spin CLI) for spec-driven data engineering — 53 specialist agents, 24 KB domains, 9 gates, model routing, and an adversarial verification loop. The CLI never calls a model; commands orchestrate Claude around CLI-enforced gates.",
+  "description": "Deterministic, testable spec-driven orchestration for Claude Code. The spin CLI is the spine — it never calls a model; it orders, gates, routes, and ledgers the work while slash commands orchestrate Claude around its CLI-enforced gates. Ships 17 core agents + a seeded spindle-harness KB, 11 typed gates, a measurement layer (run-ledger / eval / budget), model routing (Haiku/Sonnet/Opus), and an adversarial verification loop. The domain specialist catalog is an optional, reversible bundle.",
   "author": {
     "name": "Ivis Ribeiro"
   },

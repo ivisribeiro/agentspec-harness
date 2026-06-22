@@ -1,0 +1,7 @@
+{
+  "id": "G_AUDIT-block",
+  "gate": "G_AUDIT",
+  "expect": "block",
+  "args": { "handoff": "audit.json" },
+  "note": "a built item claims done with empty evidence — must block"
+}

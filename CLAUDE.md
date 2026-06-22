@@ -119,12 +119,20 @@ between `src/`+`schemas/` and `plugin/`.
 | `spin init --schema <sdd\|kb> --feature <slug>` | scaffold `.spindle/`, copy the editable schema, create `run.json` |
 | `spin next` | `{ ready:[{id,model,parallel_group}], blocked:{}, complete:bool }` |
 | `spin order` | full Kahn build order |
+| `spin trace` | the run-ledger timeline (`events[]`) + a tier/token summary. Pure read, exit 0 — a report, not a gate |
+| `spin eval [--corpus d] [--strict]` | replay the eval corpus through the REAL gates; exit 1 on a verdict regression (`--strict` also requires every gate to have a pass+block case) |
+| `spin budget [--max-tokens n]` | reconcile model-reported token spend per tier vs an optional ceiling. Advisory — always exit 0 (accounting, not enforcement) |
+| `spin fanout-check` | assert no `parallel_group` is partially complete (a dropped fan-out worker); exit 0 all-consistent / 1 partial. Run before a phase gate |
 | `spin state` | the `run.json` ledger (`completed[]`, `retries{}`, `gates{}`) |
 | `spin complete <id> [--handoff f.json]` | validate the handoff against the artifact's schema, THEN mark complete (exit 1 if invalid) |
+| `spin approve [--by <name>]` | record human sign-off (required by `G_SHIP`). REFUSES unless stdin is an interactive TTY — an automated agent cannot approve. No bypass flag |
+| `spin invalidate <id>` | after an `/iterate` edit: drop `<id>` + its downstream closure from the ledger and void ALL gate verdicts + approval, so no stale-green survives |
 | `spin validate <id\|path>` | structural checks (md sections / manifest table / criteria IDs); exit 0/1 |
-| `spin gate <gateId> [--agents d] [--routing f] [--findings f]` | run a named gate; exit 0 pass / 1 BLOCK with `{gate,passed,reasons,unmet}` |
+| `spin gate <gateId> [--agents d] [--routing f] [--kb d] [--findings f]` | run a named gate; exit 0 pass / 1 BLOCK with `{gate,passed,reasons,unmet}`. `--kb` (default `plugin/kb`) backs G_ROUTER_COVERAGE's kb_domains referential check |
 | `spin diff-criteria --define f --build f` | set-diff DEFINE criteria vs BUILD passed -> `unmet[]` |
 | `spin handoff-check <schemaId> <file.json>` | standalone handoff validation |
+| `spin merge-findings <files...> [--out f]` | deterministically merge N finding files (dedup file+line+rule, keep higher severity, aggregate sources) into one `{findings,sources}` for `G_REVIEW_BLOCK` |
+| `spin kb-install <domain> [--from d] [--dest d]` | publish a complete flat KB domain from `.spindle/` into `plugin/kb/` (pure copy) so `kb_domains` resolves; exit 1 if the source is incomplete |
 | `spin retry <id> --inc \| --ok` | retry counter vs `config.build_retry_cap`; `--ok` exits 1 at ceiling |
 | `spin route <taskKind> [--budget std\|low]` | `{ tier, model, reason }` |
 | `spin schema show \| validate` | inspect / validate the active editable schema |
@@ -136,15 +144,23 @@ between `src/`+`schemas/` and `plugin/`.
 **Gate ids** (`spin gate <id>`):
 `G_DEFINE` (before /design), `G_DESIGN` (before /build), `G_BUILD` (before
 /ship — every manifest file exists on disk + criteria-diff empty + BUILD_REPORT
-exists), `G_SHIP` (define.criteria minus build.passed is empty), `G_KB_STRUCTURE`,
-`G_KB_COVERAGE`, `G_ROUTER_COVERAGE` (agent→routing bijection, no silent skips),
+exists + no passed criterion's CI `verified_by_result` is `failed` + (when
+`config.require_verified_by`) every passed criterion cites a verifier; the spine
+READS the CI result, never runs the verifier), `G_SHIP` (define.criteria minus build.passed is empty AND a human approval is
+recorded via `spin approve` — the seam applied to sign-off: a model cannot approve), `G_KB_STRUCTURE`,
+`G_KB_COVERAGE` (every manifest concept authored + enough test cases; manifest shape
+is Zod-validated; E-1: a `needs_decoding` concept must carry a non-empty
+`decoding_note`), `G_ROUTER_COVERAGE` (agent→routing bijection, no silent skips, PLUS
+kb_domains referential integrity — every declared domain must resolve to a
+`--kb`/`plugin/kb` dir; existence, NOT usage proof),
 `G_REVIEW_BLOCK` (surviving CRITICAL findings > 0 ⇒ block; shared by /review and
 /migrate), `G_HANDOFF` (enforced inside `spin complete --handoff`).
 
 **Handoff schema ids** (the `handoff:` field / `spin complete --handoff` /
 `spin handoff-check`):
 `define`, `design`, `build-task`, `build-report`, `finding`, `claim`,
-`migration-plan`, `claudemd-section`, `kb-concept`.
+`migration-plan`, `claudemd-section`, `kb-concept` (carries optional `decoding_note`
+for the E-1 honesty rule), `audit`.
 
 **Route task-kinds** (`spin route <kind>`), by tier:
 - **HAIKU** (mechanical, gate-backstopped): `file-read`, `structure-extract`,
@@ -264,6 +280,16 @@ A command or worker reads `.spindle/` via `spin state` / `spin next`; only `spin
 mutates `run.json`. Do not hand-edit the ledger — the determinism guarantee
 depends on it being machine-owned.
 
+`run.json` also carries an append-only `events[]` ledger — the run's *trajectory*
+(`complete` / `gate` / `retry`), distinct from the current-state maps
+(`completed[]` / `retries{}` / `gates{}`). It is written only at the existing CLI
+mutation points and is a pure superset, so crash-safety and idempotency hold (an
+unchanged gate re-run appends nothing). A `complete` event may carry an **opaque,
+model-reported `usage`** annotation (`{tier, model?, tokens_in?, tokens_out?}`) that
+the worker put on its handoff sidecar — the CLI **records** it, never computes or
+prices it (the guard test forbids tokenizers/pricing in `src/`). `spin trace` reads
+this ledger; it is accounting, not enforcement.
+
 ---
 
 ## 9. Build & test
@@ -293,4 +319,29 @@ invoke the compiled `dist/cli/index.js`.
 - [ ] New worker agent has valid `name`/`description` frontmatter and a route
       (`G_ROUTER_COVERAGE` green).
 - [ ] `npm run build` clean; `npm test` green, **including the model-free guard
-      test**; coverage not regressed (`npm run test:coverage`).
+      test and the authorship guard**; coverage not regressed (`npm run test:coverage`).
+
+---
+
+## 11. Vocabulary — Spindle's terms (and the upstream nouns to retire)
+
+Spindle is its own product, not a visible fork. Use these terms in code, comments,
+docs, commands, and worker prose. The authorship guard (`scripts/guard-no-fork-tells.js`,
+run in CI and as a vitest test) **fails the build if an upstream source name leaks into
+`plugin/` prose** — provenance lives in `CREDITS.md` and per-file `origin:` frontmatter
+stamps, nowhere else.
+
+| Use this | Not this | Meaning |
+|---|---|---|
+| **the seam** | — | the one boundary where the model side calls the deterministic `spin` CLI and branches on its exit code |
+| **artifact graph** | OpenSpec "change" / "proposal" | the Kahn-ordered DAG of phase artifacts a run advances through |
+| **handoff sidecar** | — | the typed `.json` a worker writes beside its `.md`, validated by `spin complete --handoff` |
+| **run-ledger** | — | `.spindle/run.json`, CLI-written only — the crash-safe record of `completed[]` / `retries{}` / `gates{}` |
+| **gate verdict** | — | a gate's `{passed, reasons[], unmet[]}`, surfaced via exit code |
+| **worker** | "AgentSpec agent" | a subagent that authors one artifact + one handoff and never decides control flow |
+| **orchestration tier** (T0/T1/T2) | — | how much machinery a task warrants: solo / one worker / fan-out + adversary |
+| **routed tier** (Haiku/Sonnet/Opus) | — | the model a task-kind runs on, returned by `spin route` |
+
+Naming rule: never write **AgentSpec**, **OpenSpec**, or **ECC** into `plugin/` prose.
+Credit upstreams once in `CREDITS.md`; stamp an adapted file with `origin: <source>` in
+its frontmatter (the guard allows the literal only on an `origin:` line).

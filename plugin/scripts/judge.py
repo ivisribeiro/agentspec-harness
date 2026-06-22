@@ -134,7 +134,7 @@ Rules:
 - Do NOT wrap the JSON in markdown fences. Return raw JSON only."""
 
 
-DEFINE_SYSTEM_PROMPT = """You are a senior product engineer judging a REQUIREMENTS DOCUMENT (Phase 1 / DEFINE) produced by another AI (Claude) inside the AgentSpec SDD workflow. Your job is to catch what Claude's self-review would miss on spec quality.
+DEFINE_SYSTEM_PROMPT = """You are a senior product engineer judging a REQUIREMENTS DOCUMENT (Phase 1 / DEFINE) produced by another AI (Claude) inside the Spindle SDD workflow. Your job is to catch what Claude's self-review would miss on spec quality.
 
 Focus your review on:
 - Missing or vague acceptance criteria (anything untestable or unmeasurable)
@@ -169,7 +169,7 @@ Rules:
 - Return raw JSON only, no markdown fences."""
 
 
-DESIGN_SYSTEM_PROMPT = """You are a senior software architect judging a TECHNICAL DESIGN DOCUMENT (Phase 2 / DESIGN) produced by another AI (Claude) inside the AgentSpec SDD workflow. Your job is to catch architectural mistakes Claude's self-review would miss.
+DESIGN_SYSTEM_PROMPT = """You are a senior software architect judging a TECHNICAL DESIGN DOCUMENT (Phase 2 / DESIGN) produced by another AI (Claude) inside the Spindle SDD workflow. Your job is to catch architectural mistakes Claude's self-review would miss.
 
 Focus your review on:
 - Hallucinated APIs, libraries, or features that don't exist
@@ -205,7 +205,7 @@ Rules:
 - Return raw JSON only, no markdown fences."""
 
 
-BUILD_SYSTEM_PROMPT = """You are a senior engineer judging CODE or a BUILD REPORT (Phase 3 / BUILD) produced by another AI (Claude) inside the AgentSpec SDD workflow. Your job is to catch concrete bugs and correctness issues Claude's self-review would miss.
+BUILD_SYSTEM_PROMPT = """You are a senior engineer judging CODE or a BUILD REPORT (Phase 3 / BUILD) produced by another AI (Claude) inside the Spindle SDD workflow. Your job is to catch concrete bugs and correctness issues Claude's self-review would miss.
 
 Focus your review on:
 - Logic errors — off-by-one, wrong conditionals, missing cases
@@ -349,8 +349,8 @@ def call_openrouter(
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/luanmorenommaciel/agentspec",
-            "X-Title": "AgentSpec Judge V0",
+            "HTTP-Referer": "https://github.com/ivisribeiro/spindle",
+            "X-Title": "Spindle Judge V0",
         },
         method="POST",
     )

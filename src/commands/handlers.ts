@@ -8,7 +8,9 @@ import {
   initRunState,
   loadRunState,
   markComplete,
+  markApproved,
   markIncomplete,
+  invalidate,
   completedSet,
   incRetry,
   getRetry,
@@ -18,6 +20,7 @@ import {
   handoffDir,
   schemaCopyPath,
 } from '../core/run/run-state.js';
+import { Usage, type RunEvent } from '../core/run/run-state.schema.js';
 import { buildGateContext, runGate } from '../core/gates/gate-runner.js';
 import { checkHandoffFile, checkHandoffObject } from '../core/handoff/handoff-check.js';
 import { criteriaDiff } from '../core/validation/criteria-diff.js';
@@ -30,6 +33,7 @@ import { explainGate } from '../core/gates/gate-docs.js';
 import { listGates } from '../core/gates/registry.js';
 import { describeHandoff, listHandoffIds } from '../core/handoff/describe.js';
 import { specDrift, type BuildResult } from '../core/spec-drift.js';
+import { runEvalCorpus } from '../core/eval/eval.js';
 
 // Each handler returns a HandlerResult; the CLI prints `json` and exits `code`.
 // Exit-code ABI: 0 pass · 1 gate-blocked/invalid · 2 usage · 3 internal.
@@ -95,6 +99,238 @@ export function stateHandler(root: string): HandlerResult {
   return ok(loadRunState(root));
 }
 
+export function traceHandler(root: string): HandlerResult {
+  if (!runStateExists(root)) return usage('no run state — run "spin init" first');
+  const state = loadRunState(root);
+  const events = state.events;
+
+  const completes = events.filter(
+    (e): e is Extract<RunEvent, { kind: 'complete' }> => e.kind === 'complete'
+  );
+  const gates = events.filter((e): e is Extract<RunEvent, { kind: 'gate' }> => e.kind === 'gate');
+  const retries = events.filter((e) => e.kind === 'retry');
+
+  // Pure aggregation over RECORDED events: counting completions/verdicts and summing
+  // model-reported token numbers. No tokenization, no pricing — the spine never
+  // measures inference, it only adds up numbers the model handed it.
+  const tierHistogram: Record<string, number> = {};
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let anyTokensReported = false;
+  for (const c of completes) {
+    const tier = c.usage?.tier ?? 'unreported';
+    tierHistogram[tier] = (tierHistogram[tier] ?? 0) + 1;
+    if (c.usage?.tokens_in != null) {
+      tokensIn += c.usage.tokens_in;
+      anyTokensReported = true;
+    }
+    if (c.usage?.tokens_out != null) {
+      tokensOut += c.usage.tokens_out;
+      anyTokensReported = true;
+    }
+  }
+
+  return ok({
+    feature: state.feature,
+    schema: state.schema,
+    events,
+    summary: {
+      completed: completes.length,
+      gates: {
+        total: gates.length,
+        passed: gates.filter((g) => g.passed).length,
+        blocked: gates.filter((g) => !g.passed).length,
+      },
+      retries: retries.length,
+      tier_histogram: tierHistogram,
+      // null (not zero) when no worker reported usage — absence is honest, since the
+      // CLI cannot derive these itself.
+      reported_tokens: anyTokensReported ? { tokens_in: tokensIn, tokens_out: tokensOut } : null,
+    },
+  });
+}
+
+export function budgetHandler(root: string, opts: { maxTokens?: string }): HandlerResult {
+  if (!runStateExists(root)) return usage('no run state — run "spin init" first');
+  let max: number | null = null;
+  if (opts.maxTokens !== undefined) {
+    const n = Number(opts.maxTokens);
+    if (!Number.isFinite(n) || n < 0) return usage('--max-tokens must be a non-negative number');
+    max = Math.floor(n);
+  }
+
+  const state = loadRunState(root);
+  const completes = state.events.filter(
+    (e): e is Extract<RunEvent, { kind: 'complete' }> => e.kind === 'complete'
+  );
+
+  // Reconcile reported spend per tier. The CLI only SUMS numbers the model handed it
+  // on the handoff sidecar — it never tokenizes, estimates, or prices. This is
+  // accounting, not enforcement: it cannot independently verify a self-reported count.
+  const byTier: Record<string, { completions: number; tokens_in: number; tokens_out: number }> = {};
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let anyReported = false;
+  for (const c of completes) {
+    const tier = c.usage?.tier ?? 'unreported';
+    const bucket = (byTier[tier] ??= { completions: 0, tokens_in: 0, tokens_out: 0 });
+    bucket.completions += 1;
+    if (c.usage?.tokens_in != null) {
+      bucket.tokens_in += c.usage.tokens_in;
+      tokensIn += c.usage.tokens_in;
+      anyReported = true;
+    }
+    if (c.usage?.tokens_out != null) {
+      bucket.tokens_out += c.usage.tokens_out;
+      tokensOut += c.usage.tokens_out;
+      anyReported = true;
+    }
+  }
+  const total = tokensIn + tokensOut;
+  const overBudget = max != null && anyReported && total > max;
+
+  // ADVISORY by design: always exit 0. A genuinely T2 task SHOULD cost a lot; budget
+  // accounting must never block legitimate spend. The signal is the `over_budget`
+  // flag + warning, not an exit code.
+  return ok({
+    feature: state.feature,
+    reported: anyReported ? { tokens_in: tokensIn, tokens_out: tokensOut, total } : null,
+    by_tier: byTier,
+    max_tokens: max,
+    over_budget: overBudget,
+    advisory: true,
+    warning: overBudget
+      ? `reported spend ${total} tokens exceeds the declared budget of ${max} — advisory only, not enforced`
+      : null,
+  });
+}
+
+export function fanoutCheckHandler(root: string): HandlerResult {
+  if (!runStateExists(root)) return usage('no run state — run "spin init" first');
+  const graph = activeGraph(root);
+  const completed = completedSet(root);
+
+  const groups = new Map<string, string[]>();
+  for (const a of graph.getAllArtifacts()) {
+    if (a.parallel_group) {
+      const members = groups.get(a.parallel_group) ?? [];
+      members.push(a.id);
+      groups.set(a.parallel_group, members);
+    }
+  }
+
+  const reasons: string[] = [];
+  const unmet: string[] = [];
+  const checked: Array<{ group: string; members: number; complete: number }> = [];
+  for (const [group, members] of groups) {
+    const done = members.filter((m) => completed.has(m));
+    checked.push({ group, members: members.length, complete: done.length });
+    // A parallel group that is STARTED (>=1 done) but not FINISHED at a phase boundary
+    // means a fanned-out worker was dropped — the silent failure parallel-fanout itself
+    // could not catch. Run this before the phase gate.
+    if (done.length > 0 && done.length < members.length) {
+      const missing = members.filter((m) => !completed.has(m));
+      reasons.push(
+        `parallel group "${group}" is partially complete (${done.length}/${members.length}) — dropped worker(s): ${missing.join(', ')}`
+      );
+      for (const m of missing) unmet.push(`incomplete-group:${group}:${m}`);
+    }
+  }
+
+  const result = {
+    feature: loadRunState(root).feature,
+    groups: checked,
+    passed: unmet.length === 0,
+    reasons,
+    unmet,
+  };
+  return unmet.length === 0 ? ok(result) : blocked(result);
+}
+
+interface RawFinding {
+  file: string;
+  line?: number | null;
+  severity: string;
+  rule: string;
+  message: string;
+  source: string;
+}
+
+export function mergeFindingsHandler(root: string, files: string[], opts: { out?: string }): HandlerResult {
+  if (!files || files.length === 0) return usage('merge-findings requires one or more finding JSON files');
+  const all: RawFinding[] = [];
+  for (const f of files) {
+    const p = path.isAbsolute(f) ? f : path.join(root, f);
+    if (!fs.existsSync(p)) return usage(`finding file not found: ${p}`);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(fs.readFileSync(p, 'utf-8'));
+    } catch {
+      return usage(`finding file is not valid JSON: ${p}`);
+    }
+    const arr = Array.isArray(parsed) ? parsed : (parsed as { findings?: unknown }).findings;
+    if (!Array.isArray(arr)) return usage(`expected a findings array (or {findings:[...]}) in ${p}`);
+    for (const item of arr) all.push(item as RawFinding);
+  }
+  // Deterministic merge: dedup by (file, line, rule), keep the higher severity on a
+  // collision, and aggregate the distinct contributing sources. Replaces the prose merge
+  // so a CRITICAL cannot be dropped (and a source forged) by hand before the gate sees it.
+  const rank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+  const byKey = new Map<string, RawFinding>();
+  for (const f of all) {
+    const key = `${f.file}::${f.line ?? ''}::${f.rule}`;
+    const existing = byKey.get(key);
+    if (!existing || (rank[f.severity] ?? 0) > (rank[existing.severity] ?? 0)) byKey.set(key, f);
+  }
+  const findings = [...byKey.values()];
+  const sources = [...new Set(all.map((f) => f.source).filter(Boolean))].sort();
+  const out = { findings, sources };
+  if (opts.out) {
+    const p = path.isAbsolute(opts.out) ? opts.out : path.join(root, opts.out);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify(out, null, 2) + '\n');
+  }
+  return ok({ out: opts.out ?? null, findings, sources, count: findings.length });
+}
+
+export function kbInstallHandler(
+  root: string,
+  domain: string,
+  opts: { from?: string; dest?: string }
+): HandlerResult {
+  if (!domain || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(domain)) {
+    return usage('kb-install requires a kebab-case <domain>');
+  }
+  // Source = the workspace where /create-kb authored the domain (default .spindle/features/<domain>).
+  const src = opts.from ? path.resolve(root, opts.from) : featureDir(root, domain);
+  if (!fs.existsSync(src)) {
+    return usage(`KB source not found: ${src} — run /create-kb ${domain} first`);
+  }
+  // Only a complete, gate-passing flat KB domain may be published. This is a pure file
+  // copy (no model); it lands the generated domain where G_ROUTER_COVERAGE --kb resolves it.
+  const required = ['index.md', 'quick-reference.md', 'manifest.json'];
+  const missing = required.filter((f) => !fs.existsSync(path.join(src, f)));
+  const concepts = fs.readdirSync(src).filter((f) => f.startsWith('concept-') && f.endsWith('.md'));
+  if (missing.length > 0 || concepts.length === 0) {
+    return blocked({
+      installed: false,
+      domain,
+      missing,
+      concepts: concepts.length,
+      reason: 'source is not a complete flat KB domain — pass G_KB_STRUCTURE + G_KB_COVERAGE first',
+    });
+  }
+  const destRoot = opts.dest ? path.resolve(root, opts.dest) : path.join(root, 'plugin', 'kb');
+  const dest = path.join(destRoot, domain);
+  fs.mkdirSync(dest, { recursive: true });
+  const copied: string[] = [];
+  for (const f of [...required, ...concepts]) {
+    fs.copyFileSync(path.join(src, f), path.join(dest, f));
+    copied.push(f);
+  }
+  return ok({ installed: true, domain, dest, copied });
+}
+
 export function nextHandler(root: string): HandlerResult {
   if (!runStateExists(root)) return usage('no run state — run "spin init" first');
   const graph = activeGraph(root);
@@ -148,7 +384,24 @@ export function completeHandler(
     fs.writeFileSync(dest, JSON.stringify(check.data, null, 2) + '\n');
   }
 
-  const state = markComplete(root, id);
+  // Opaque, model-reported usage rides on the sidecar's optional top-level `usage`
+  // key (the artifact schema strips unknown keys, so this never affects validation).
+  // The CLI only RECORDS it — it never computes or prices tokens. Usage is advisory:
+  // a malformed or absent annotation never blocks completion.
+  let reportedUsage: Usage | undefined;
+  if (opts.handoff && fs.existsSync(opts.handoff)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(opts.handoff, 'utf-8')) as { usage?: unknown };
+      if (raw.usage !== undefined) {
+        const parsed = Usage.safeParse(raw.usage);
+        if (parsed.success) reportedUsage = parsed.data;
+      }
+    } catch {
+      /* usage is advisory; never block completion on it */
+    }
+  }
+
+  const state = markComplete(root, id, reportedUsage);
   return ok({ completed: id, runState: state });
 }
 
@@ -403,6 +656,54 @@ export function specDriftHandler(root: string, opts: { build?: string }): Handle
   const report = specDrift(results);
   const result = { build: buildPath, ...report };
   return report.clean ? ok(result) : blocked(result);
+}
+
+export function evalHandler(opts: { corpus?: string; strict?: boolean }): HandlerResult {
+  const corpus = opts.corpus
+    ? path.isAbsolute(opts.corpus)
+      ? opts.corpus
+      : path.join(process.cwd(), opts.corpus)
+    : path.join(packageRoot(), 'schemas', 'evals');
+  if (!fs.existsSync(corpus)) {
+    return usage(`eval corpus not found: ${corpus}`);
+  }
+  const report = runEvalCorpus(corpus);
+  // A verdict regression (a gate no longer blocks/passes as recorded) always fails.
+  // --strict additionally fails when the corpus does not cover every registry gate
+  // with both a pass and a block case (the fail-closed completeness discipline).
+  const coverageIncomplete = opts.strict === true && !report.coverage.complete;
+  const fail = report.regressions.length > 0 || coverageIncomplete;
+  return fail ? blocked(report) : ok(report);
+}
+
+export function invalidateHandler(root: string, id: string): HandlerResult {
+  if (!runStateExists(root)) return usage('no run state — run "spin init" first');
+  const graph = activeGraph(root);
+  if (!graph.getArtifact(id)) return usage(`unknown artifact "${id}"`);
+  // Cascade: the edited artifact + everything that transitively depends on it.
+  const closure = graph.getDownstream([id]);
+  const state = invalidate(root, closure);
+  return ok({
+    invalidated: closure,
+    completed: state.completed,
+    gates_cleared: true,
+    approval_cleared: true,
+  });
+}
+
+export function approveHandler(root: string, opts: { by?: string }): HandlerResult {
+  if (!runStateExists(root)) return usage('no run state — run "spin init" first');
+  // The seam applied to sign-off: approval requires a human at an interactive TTY. An
+  // automated agent's shell is not a TTY, so the model cannot grant it. There is NO
+  // bypass flag — that is the whole point (G_SHIP depends on this being un-fakeable).
+  if (!process.stdin.isTTY) {
+    return usage(
+      'approval requires an interactive human terminal — an automated agent cannot approve. Run `spin approve` yourself in a terminal before /ship.'
+    );
+  }
+  const by = opts.by ?? process.env.USER ?? 'human';
+  const state = markApproved(root, by);
+  return ok({ approved: true, by, at: state.approval?.at ?? null, feature: state.feature });
 }
 
 export { markIncomplete };

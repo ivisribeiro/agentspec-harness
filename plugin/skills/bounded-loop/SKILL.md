@@ -1,119 +1,111 @@
 ---
 name: bounded-loop
-description: Bound a build/retry loop with a deterministic counter that lives in the CLI ledger, not in prose. Use whenever a worker handoff fails `spin complete` and you need to re-dispatch, or whenever you would otherwise write "retry up to N times" / "max 3 attempts" into a command. The ceiling is `config.build_retry_cap` enforced by `spin retry <id>`; the loop body lives in the slash command and fans out workers via Task. Corrects the fake-dispatch anti-pattern (no `claude -p`, no inference endpoints).
+description: Bound a build/retry loop with a deterministic counter that lives in the CLI ledger, not in prose. Use whenever a worker handoff fails `spin complete` and you need to re-dispatch, or whenever you would otherwise write "retry up to N times" into a command. The ceiling is `config.build_retry_cap` read by `retryHandler` in src/commands/handlers.ts; the counter is `incRetry`/`getRetry` in src/core/run/run-state.ts writing `retries{}` in run.json.
 ---
 
 # Bounded loop
 
-A retry loop is bounded when **the counter lives in `run.json` and the ceiling
-is enforced by `spin`** — not when a command says "try up to 3 times". The model
-counting in its own head is not a bound; it is a suggestion. The bound is
-`spin retry <id> --inc | --ok` checked against `config.build_retry_cap`.
+The mechanism backing this skill is **`retryHandler`** in
+`src/commands/handlers.ts`, which reads the retry ceiling from
+`graph.getSchema().config?.build_retry_cap ?? 3` and delegates the actual
+counter to **`incRetry`** and **`getRetry`** in
+`src/core/run/run-state.ts`. Both write `state.retries[id]` into
+`run.json` via an atomic rename. The CLI enforces the ceiling; the model
+never counts in its own head.
 
-## The invariant this skill protects
+For the exit-code ABI (0 pass · 1 blocked · 2 usage error · 3 internal),
+the full `spin next → Task → spin complete → spin gate` protocol, and the
+fake-dispatch anti-pattern, see the **harness-protocol** skill. This skill
+covers only the bounded-loop mechanics.
 
-`spin` (the CLI) NEVER calls a model. The loop *body* runs in the slash command
-(the only place a model runs) and fans out workers via the **Task** tool. Every
-ordering / counter / ceiling decision is a call to `spin`, and control flow
-branches strictly on its **exit code**.
+## What makes a loop bounded
 
-Exit-code ABI: `0` = pass · `1` = gate blocked / handoff invalid / ceiling hit ·
-`2` = usage error · `3` = internal error.
+A loop is bounded when:
 
-Invoke the CLI as `node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js <args>`
-(shorthand below: `spin <args>`).
+1. The counter lives in `run.json` under `retries{<id>}` (written by `incRetry`).
+2. The ceiling is `config.build_retry_cap` from the active schema (read by
+   `retryHandler` at every `--inc` and `--ok` call).
+3. The command branches **strictly on the exit code** of `spin retry` — it
+   does not count in prose, in memory, or in a shell variable.
 
-## Anti-pattern this corrects: ECC fake-dispatch
+"Retry up to 3 times" written anywhere in a command is not a bound. It is a
+suggestion the model can ignore. The only bound is `spin retry <id> --ok`
+returning exit `1` when `getRetry(root, id) >= cap`.
 
-The ECC `autonomous-agent-harness` pattern told the command to "dispatch the
-build agent" by shelling out to an inference endpoint (`claude -p ...`) and to
-"retry up to 3 times" in prose. Both are wrong here:
+## The two sub-commands and what they do
 
-| Fake-dispatch (do NOT do) | This harness (do) |
-|---|---|
-| Command runs `claude -p` / hits an inference endpoint | Command fans out a worker via the **Task** tool on the routed model |
-| "retry up to 3 times" written in the command prose | Counter in `run.json`, ceiling = `config.build_retry_cap`, enforced by `spin retry` |
-| Model decides when it has "tried enough" | `spin retry <id> --ok` exits `1` at the ceiling; the model obeys the exit code |
-| `spin` asked to run/choose a model | `spin` only validates, counts, gates — never calls a model |
-
-If you ever find yourself writing `claude -p`, an HTTP call to a model, or a
-hard-coded retry number, stop: the counter belongs in the CLI.
-
-## The loop
-
-Each ready artifact (from `spin next`) is attempted, validated by
-`spin complete --handoff`, and re-attempted on exit `1` until the handoff
-validates or `spin retry --ok` reports the ceiling. Pseudocode for one artifact:
-
-```text
-# 1. learn the ready artifact + its model hint
-spin next                     # -> { ready:[{id,model,parallel_group}], ... }
-
-# 2. resolve the tier for the work kind (or use the artifact's model hint)
-spin route code-build         # -> { tier, model, reason }
-
-loop:
-  # 3. dispatch the worker on the routed model via the Task tool.
-  #     The worker writes its markdown artifact AND a JSON handoff sidecar
-  #     (.spindle/features/<feature>/.handoffs/<id>.json, schema id: build-task).
-
-  # 4. validate the handoff, then mark complete — never mark complete by hand
-  spin complete <id> --handoff <sidecar>
-  if exit 0:  break          # handoff valid -> artifact done, leave the loop
-
-  # exit 1 -> handoff invalid. Charge one attempt against the ceiling:
-  spin retry <id> --ok
-  if exit 1:  STOP           # ceiling (config.build_retry_cap) hit -> surface + halt
-  spin retry <id> --inc       # record the attempt in run.json
-  goto loop                  # re-dispatch a fresh worker via Task
+```
+spin retry <id> --ok
 ```
 
-Notes:
-- `--ok` is the **gate read**: it exits `1` *at* the ceiling and `0` while
-  budget remains. Check it BEFORE `--inc` so the attempt you are about to start
-  is still within budget.
-- `--inc` is the **write**: it advances `retries{<id>}` in the ledger.
-- The number lives in `config.build_retry_cap` in the active schema, not in
-  this file. Changing the cap is a schema edit, never a prose edit.
-- Re-dispatch means a fresh **Task** worker on the routed model — not a manual
-  fix and not a re-run of `spin`.
+**Read gate.** Calls `getRetry` to fetch the current count and compares it
+against the cap. Exits `1` when `count >= cap` (ceiling hit); exits `0`
+while budget remains. Call this **before** `--inc` to check whether the
+attempt you are about to start is still within budget.
+
+```
+spin retry <id> --inc
+```
+
+**Write.** Calls `incRetry`, which increments `state.retries[id]`, appends a
+`{kind:'retry', id, attempt}` event to the ledger, and atomically writes
+`run.json`. Returns the new count. Exits `1` if the count after increment
+exceeds the cap (exceeded); exits `0` otherwise.
+
+The separation matters: `--ok` tells you whether to loop again; `--inc`
+records that you are looping. Never skip `--ok` or you will start an attempt
+that the ceiling has already disallowed.
+
+## The loop for one artifact
+
+```text
+loop:
+  # Dispatch a fresh worker via the Task tool on the routed model.
+  # The worker writes the markdown artifact AND its JSON handoff sidecar.
+
+  spin complete <id> --handoff <sidecar>
+  if exit 0:  break          # handoff valid — artifact done, leave the loop
+
+  # exit 1 -> G_HANDOFF blocked. Gate the next attempt first:
+  spin retry <id> --ok
+  if exit 1:  STOP           # ceiling hit -> surface artifact id + retries{} + cap -> halt
+
+  spin retry <id> --inc      # record the attempt in run.json
+  goto loop                  # re-dispatch a fresh Task worker
+```
+
+The `--ok` check precedes `--inc` so the attempt that would breach the
+ceiling is never dispatched. On ceiling hit, surface the artifact id, the
+`retries{}` count, and `config.build_retry_cap` from `spin state`, then
+halt. Do not run `spin gate G_BUILD` as though it passed.
 
 ## Inspecting the counter
 
 ```bash
-spin state            # the run.json ledger: completed[], retries{}, gates{}
+spin state
 ```
 
-`retries{<id>}` is the live attempt count for the artifact; `config.build_retry_cap`
-is its ceiling. These are the source of truth — never assert "we've retried N
-times" from memory.
+`run.json` contains `retries{<id>}` (the live attempt count) and `events[]`
+(the full retry trajectory with timestamps). These are the source of truth.
+Never assert "we have retried N times" from memory — read `spin state`.
 
-## Where the loop sits in the phase gate
+## Where the loop sits in the phase flow
 
-The bounded loop produces the per-artifact handoffs that `G_BUILD` then audits.
-`G_BUILD` (every manifest file exists on disk + criteria-diff empty +
-BUILD_REPORT exists) **replaces the old prose "max 3 retries + checkbox"** — the
-loop guarantees forward progress, the gate guarantees the result:
+The bounded loop produces per-artifact handoffs. `G_BUILD` (run at the
+DEFINE→SHIP boundary; exits `1` if any manifest file is missing on disk,
+criteria-diff is non-empty, or no BUILD_REPORT exists) is the phase-level
+deterministic check that supersedes prose "max 3 retries + checkbox". The
+loop guarantees forward progress on each artifact; `G_BUILD` guarantees the
+result set is complete.
 
 ```bash
-spin gate G_BUILD     # exit 0 -> proceed toward /ship; exit 1 -> STOP, surface {reasons,unmet}
+spin gate G_BUILD     # exit 0 -> proceed to /ship; exit 1 -> STOP, surface {reasons,unmet}
 ```
 
-If `spin retry <id> --ok` hits the ceiling, STOP and surface the failing artifact
-id and its `retries{}` count plus `config.build_retry_cap`. Do not advance the
-phase, do not run `G_BUILD` as if it passed, and do not hand-edit `run.json`
-(it is CLI-written only).
+## Checklist before shipping a command that loops
 
-## Checklist before you ship a command that loops
-
-- [ ] The loop body dispatches workers via the **Task** tool, never `claude -p`
-      or an inference endpoint.
-- [ ] Every re-attempt is gated by `spin retry <id> --ok` (read) then recorded by
-      `spin retry <id> --inc` (write).
-- [ ] No hard-coded retry number anywhere in prose; the ceiling is
-      `config.build_retry_cap`.
-- [ ] Completion is only ever `spin complete <id> --handoff <sidecar>`, branching
-      on exit code — never a hand-marked completion.
-- [ ] On ceiling hit, control flow STOPs and surfaces the artifact id +
-      `retries{}` from `spin state`; the phase gate (`spin gate G_BUILD`) is not
-      advanced past.
+- [ ] Workers are dispatched via the **Task** tool, not via any inference endpoint.
+- [ ] `spin retry <id> --ok` (read) is called **before** `spin retry <id> --inc` (write).
+- [ ] The retry ceiling is nowhere in prose; it comes from `config.build_retry_cap`.
+- [ ] Completion is only via `spin complete <id> --handoff <sidecar>`; no hand-editing of `run.json`.
+- [ ] On ceiling hit, control flow halts and surfaces the artifact id + `retries{}` from `spin state`; `G_BUILD` is not advanced.

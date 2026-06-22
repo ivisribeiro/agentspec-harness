@@ -40,6 +40,41 @@ describe('G_REVIEW_BLOCK', () => {
     expect(r.unmet[0]).toContain('a.ts');
   });
 
+  // Native cross-vendor review: a finding sourced from codex (OpenAI) is a first-class
+  // critic — G_REVIEW_BLOCK is source-agnostic, so a codex CRITICAL blocks like any other.
+  it('treats a cross-vendor (source: codex) critical finding as first-class', () => {
+    const r = gReviewBlock(
+      ctxFor({
+        findings: [
+          { file: 'a.ts', line: 3, severity: 'critical', rule: 'sql-injection', message: 'unparameterized query', source: 'codex' },
+        ],
+      })
+    );
+    expect(r.passed).toBe(false);
+    expect(r.unmet[0]).toContain('a.ts');
+  });
+
+  it('passes a codex finding set with no critical', () => {
+    const r = gReviewBlock(
+      ctxFor({ findings: [{ file: 'a.ts', line: null, severity: 'high', rule: 'style', message: 'x', source: 'codex' }] })
+    );
+    expect(r.passed).toBe(true);
+  });
+
+  it('blocks below the --min-sources independence floor', () => {
+    const ctx = ctxFor({ findings: [finding('high')] }); // one source
+    ctx.args['min-sources'] = '2';
+    const r = gReviewBlock(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('insufficient-sources');
+  });
+
+  it('passes the source floor using the merged sources summary (cross-vendor)', () => {
+    const ctx = ctxFor({ findings: [finding('low')], sources: ['arch-worker', 'codex'] });
+    ctx.args['min-sources'] = '2';
+    expect(gReviewBlock(ctx).passed).toBe(true);
+  });
+
   // The hole the final adversary found: a malformed shape must NOT silently pass.
   it('BLOCKS on a flat finding object (missing the findings array)', () => {
     const r = gReviewBlock(ctxFor({ severity: 'CRITICAL', file: 'a.ts', detail: 'oops' }));

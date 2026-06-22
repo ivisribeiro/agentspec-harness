@@ -32,6 +32,10 @@ export const DesignHandoff = z.object({
     )
     .min(1, 'manifest must list at least one file'),
   decisions: z.array(z.string()).default([]),
+  // The stack the design chose — kebab-case slugs (e.g. ["dbt","fastapi","iceberg"]).
+  // Drives KB generation: each is a domain /create-specialist can author + bind, so the
+  // build phase is grounded in the *project's* stack rather than a pre-loaded catalog.
+  technologies: z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)).default([]),
 });
 
 export const BuildTaskHandoff = z.object({
@@ -64,6 +68,10 @@ export const BuildReportHandoff = z.object({
         // substantiates it. When it looks like a path, G_BUILD requires the file
         // to exist — so "passed" can carry proof, not just a bare assertion.
         verified_by: z.string().optional(),
+        // CI-produced result of running `verified_by` (passed|failed). The CLI READS this;
+        // it NEVER executes the verifier — the spine stays a pure evaluator, execution lives
+        // in CI. A passed criterion whose result is "failed" is a contradiction G_BUILD blocks.
+        verified_by_result: z.enum(['passed', 'failed']).optional(),
       })
     )
     .default([]),
@@ -129,6 +137,11 @@ export const KbConceptHandoff = z.object({
   summary: z.string().min(1),
   test_cases: z.array(z.string()).default([]),
   needs_decoding: z.boolean().default(false),
+  // E-1 honesty: when a worker flags an opaque encoding it must say WHAT is
+  // undecoded, not just raise the flag. Optional at the schema layer (additive);
+  // gKbCoverage enforces note-required-iff-needs_decoding so the block names the
+  // offending concept.
+  decoding_note: z.string().optional(),
 });
 
 // AuditHandoff — the typed worker-output for the brownfield `audit` artifact.

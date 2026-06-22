@@ -1,0 +1,12 @@
+{
+  "domain": "auth",
+  "opsReadiness": [
+    {
+      "control": "row-level security",
+      "code_default": "off",
+      "prod_value_required": "on",
+      "env_files_checked": [".env.prod"],
+      "enforced": false
+    }
+  ]
+}

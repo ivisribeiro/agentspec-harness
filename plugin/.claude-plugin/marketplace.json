@@ -1,7 +1,7 @@
 {
   "name": "spindle",
   "metadata": {
-    "description": "AgentSpec made harness-native — deterministic, gate-backed spec-driven orchestration with the spin CLI. 65 agents, 24 KB domains, 33 commands, 9 gates, model routing."
+    "description": "Deterministic, gate-backed spec-driven orchestration with the spin CLI — the spine never calls a model. 17 core agents, 11 gates, a measurement layer, model routing; optional specialist pack."
   },
   "owner": {
     "name": "Ivis Ribeiro",
@@ -11,7 +11,7 @@
     {
       "name": "spindle",
       "version": "0.1.0",
-      "description": "Deterministic spec-driven orchestration for Claude Code. The spin CLI is the spine (it never calls a model); slash commands orchestrate Claude around CLI-enforced gates. 65 agents, 24 KB domains, 33 commands, model routing (Haiku/Sonnet/Opus), adversarial verification.",
+      "description": "Deterministic spec-driven orchestration for Claude Code. The spin CLI is the spine (it never calls a model); slash commands orchestrate Claude around CLI-enforced gates. 17 core agents, 11 gates, model routing (Haiku/Sonnet/Opus), measurement layer, adversarial verification; optional specialist pack.",
       "source": "./plugin",
       "keywords": [
         "claude-code",

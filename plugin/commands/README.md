@@ -1,6 +1,6 @@
-# AgentSpec Commands
+# Spindle Commands
 
-**31 slash commands** for the SDD workflow, data engineering, visualization, and developer productivity.
+**28 slash commands** for the SDD workflow, knowledge base, review, visualization, and developer productivity.
 
 ## Workflow Commands (7)
 
@@ -14,36 +14,35 @@
 | `/iterate` | Any | Update documents mid-stream |
 | `/create-pr` | Any | Create pull request |
 
-## Data Engineering Commands (8)
+## Data Engineering Commands (1)
 
-| Command | Description | Primary Agent |
-|---------|-------------|---------------|
-| `/pipeline` | DAG/pipeline scaffolding | pipeline-architect |
-| `/schema` | Interactive schema design | schema-designer |
-| `/data-quality` | Quality rules generation | data-quality-analyst |
-| `/lakehouse` | Table format + catalog guidance | lakehouse-architect |
-| `/sql-review` | SQL-specific code review | code-reviewer + sql-optimizer |
-| `/ai-pipeline` | RAG/embedding scaffolding | ai-data-engineer |
-| `/data-contract` | Contract authoring (ODCS) | data-contracts-engineer |
-| `/migrate` | Legacy ETL migration | dbt-specialist + spark-engineer |
+| Command | Description | Workers |
+|---------|-------------|---------|
+| `/migrate` | Legacy ETL migration with equivalence proof | migrate-dbt-worker / migrate-spark-worker / equivalence-worker |
 
-See [data-engineering/](data-engineering/) for detailed usage.
+> The other data-engineering commands (`/pipeline`, `/schema`, `/data-quality`,
+> `/lakehouse`, `/sql-review`, `/ai-pipeline`, `/data-contract`) were thin delegators to
+> domain specialists; they now live in the optional `packs/` bundle.
 
-## Core Commands (5)
+## Core Commands (8)
 
 | Command | Description |
 |---------|-------------|
+| `/audit` | Brownfield audit → define/design |
+| `/gen-router` | Regenerate the agent routing table |
+| `/spin` | Run the spin CLI directly |
 | `/status` | Project status report (health, SDD state, recommendations) |
+| `/sync-context` | Update CLAUDE.md |
 | `/meeting` | Meeting transcript analysis |
 | `/memory` | Save session insights |
-| `/sync-context` | Update CLAUDE.md |
 | `/readme-maker` | Generate README |
 
-## Knowledge Commands (1)
+## Knowledge Commands (2)
 
 | Command | Description |
 |---------|-------------|
-| `/create-kb` | Create KB domain |
+| `/create-kb` | Generate a new KB domain (gated) |
+| `/update-kb` | Update/extend an existing KB domain |
 
 ## Review Commands (2)
 
@@ -84,6 +83,6 @@ claude> /sql-review models/staging/
 
 # Visual explainer
 claude> /generate-web-diagram "Data pipeline architecture"
-claude> /generate-slides "AgentSpec overview for stakeholders"
+claude> /generate-slides "Spindle overview for stakeholders"
 claude> /diff-review main
 ```

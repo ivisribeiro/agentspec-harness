@@ -177,6 +177,52 @@ describe('G_BUILD (replaces the prose checkbox)', () => {
     expect(r.unmet).toContain('evidence-missing:AC-1');
   });
 
+  it('BLOCKS a passed criterion whose CI verifier reported failed (A2)', () => {
+    buildAllFiles();
+    fs.mkdirSync(path.join(root, 'test'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'test', 'a.test.ts'), '// t');
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed', verified_by: 'test/a.test.ts', verified_by_result: 'failed' },
+        { criterion: 'AC-2', status: 'passed' },
+      ],
+    });
+    const r = gBuild(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('verifier-failed:AC-1');
+  });
+
+  it('requires a verifier on every passed criterion when config.require_verified_by (A2)', () => {
+    buildAllFiles();
+    const strict = {
+      ...ctx,
+      graph: ArtifactGraph.fromYamlContent(SDD_YAML + '\nconfig:\n  require_verified_by: true\n'),
+    };
+    const r = gBuild(strict);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('missing-verifier:AC-2');
+  });
+
+  it('passes with require_verified_by when every passed criterion cites an existing verifier (A2)', () => {
+    buildAllFiles();
+    fs.mkdirSync(path.join(root, 'test'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'test', 'a.test.ts'), '// t');
+    fs.writeFileSync(path.join(root, 'test', 'b.test.ts'), '// t');
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed', verified_by: 'test/a.test.ts', verified_by_result: 'passed' },
+        { criterion: 'AC-2', status: 'passed', verified_by: 'test/b.test.ts', verified_by_result: 'passed' },
+      ],
+    });
+    const strict = {
+      ...ctx,
+      graph: ArtifactGraph.fromYamlContent(SDD_YAML + '\nconfig:\n  require_verified_by: true\n'),
+    };
+    expect(gBuild(strict).passed).toBe(true);
+  });
+
   it('PASSES when a cited verifier file exists', () => {
     buildAllFiles();
     fs.mkdirSync(path.join(root, 'test'), { recursive: true });
@@ -228,15 +274,28 @@ describe('G_BUILD (replaces the prose checkbox)', () => {
 });
 
 describe('G_SHIP', () => {
+  const approve = () => {
+    ctx.runState = { approval: { at: '2026-01-01T00:00:00.000Z', by: 'tester' } } as unknown as typeof ctx.runState;
+  };
+
+  it('blocks when criteria are met but there is no human approval (A1)', () => {
+    writeHandoff('define', { feature: 'feat', clarity: 1, criteria: ['AC-1'] });
+    writeHandoff('build', { feature: 'feat', results: [{ criterion: 'AC-1', status: 'passed' }] });
+    const r = gShip(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('approval');
+  });
+
   it('blocks on any unmet acceptance criterion', () => {
     writeHandoff('define', { feature: 'feat', clarity: 1, criteria: ['AC-1', 'AC-2'] });
     writeHandoff('build', { feature: 'feat', results: [{ criterion: 'AC-1', status: 'passed' }] });
     expect(gShip(ctx).passed).toBe(false);
   });
 
-  it('passes when all criteria are met', () => {
+  it('passes when all criteria are met and a human approved', () => {
     writeHandoff('define', { feature: 'feat', clarity: 1, criteria: ['AC-1'] });
     writeHandoff('build', { feature: 'feat', results: [{ criterion: 'AC-1', status: 'passed' }] });
+    approve();
     expect(gShip(ctx).passed).toBe(true);
   });
 
@@ -262,8 +321,36 @@ describe('G_SHIP', () => {
         { criterion: 'AC-1', status: 'passed', corrected_spec: true, correction: 'CRC 29B1 not 1D3D' },
       ],
     });
+    approve();
     const r = gShip(ctx);
     expect(r.passed).toBe(true); // a legitimate correction does not block ship
     expect(r.reasons.some((x) => x.includes('CORRECTED') && x.includes('AC-1'))).toBe(true);
+  });
+});
+
+describe('G_DEFINE clarity floor (config-driven)', () => {
+  const FLOOR_YAML = SDD_YAML + '\nconfig:\n  clarity_floor: 0.8\n';
+  function defineReady(clarity: number) {
+    writeArtifact('DEFINE.md', '## Why\nx\n## What\ny\n## Acceptance Criteria\n- AC-1 a\n');
+    writeHandoff('define', { feature: 'feat', clarity, criteria: ['AC-1'] });
+  }
+
+  it('blocks when clarity is below the configured floor', () => {
+    const c: GateContext = { ...ctx, graph: ArtifactGraph.fromYamlContent(FLOOR_YAML) };
+    defineReady(0.5);
+    const r = gDefine(c);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('clarity-floor');
+  });
+
+  it('passes when clarity is at/above the configured floor', () => {
+    const c: GateContext = { ...ctx, graph: ArtifactGraph.fromYamlContent(FLOOR_YAML) };
+    defineReady(0.9);
+    expect(gDefine(c).passed).toBe(true);
+  });
+
+  it('does not enforce clarity when no floor is configured (default)', () => {
+    defineReady(0.1); // far below any sane floor, but the default schema sets none
+    expect(gDefine(ctx).passed).toBe(true);
   });
 });

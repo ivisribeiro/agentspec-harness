@@ -1,0 +1,7 @@
+{
+  "id": "G_BUILD-pass",
+  "gate": "G_BUILD",
+  "expect": "pass",
+  "args": {},
+  "note": "manifest file exists, AC-1 satisfied, BUILD_REPORT present"
+}

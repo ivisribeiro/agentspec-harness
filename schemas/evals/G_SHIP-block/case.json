@@ -1,0 +1,7 @@
+{
+  "id": "G_SHIP-block",
+  "gate": "G_SHIP",
+  "expect": "block",
+  "args": {},
+  "note": "criteria met but no human approval recorded — spin approve (unmet: approval)"
+}

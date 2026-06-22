@@ -195,7 +195,7 @@ Detecting project health...
 
 # Project Status Report
 
-**Project:** agentspec
+**Project:** spindle
 **Branch:** feat/judge-layer
 **Date:** 2026-04-14
 
@@ -233,7 +233,7 @@ Detecting project health...
 | Uncommitted changes | 3 files | SECURITY.md, meeting-analyst.md, share.md |
 | TODOs/FIXMEs | 12 found | Scan with Grep for details |
 | Stack detection | Detected | Markdown, Shell, Python |
-| KB coverage | Covered | 24 KB domains available |
+| KB coverage | Covered | 1 KB domain available (spindle-harness) |
 
 ## Recommendations
 

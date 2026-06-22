@@ -1,0 +1,14 @@
+{
+  "domain": "core",
+  "proposedTasks": [
+    {
+      "title": "add rate limiting middleware",
+      "detail": "implement the limiter in src/mw/ratelimit.ts and cover it with vitest",
+      "effort": "S",
+      "domains": ["api"]
+    }
+  ],
+  "gaps": [
+    { "capability": "rate limiting", "why": "login endpoint is unbounded", "priority": "blocking" }
+  ]
+}

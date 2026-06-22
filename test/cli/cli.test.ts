@@ -191,4 +191,123 @@ describe('spin CLI exit-code ABI', () => {
     const criteria = r.json.fields.find((f: any) => f.name === 'criteria');
     expect((criteria.constraints ?? []).join(' ')).toContain('AC-');
   });
+
+  // --- the run-ledger: spin trace (Measured Harness, Fase 1) ---
+
+  it('trace on a fresh run is empty and exits 0', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const r = await cli(['--root', root, 'trace']);
+    expect(r.code).toBe(0);
+    expect(r.json.events).toEqual([]);
+    expect(r.json.summary.completed).toBe(0);
+    expect(r.json.summary.reported_tokens).toBe(null);
+  });
+
+  it('trace records a complete event with opaque model-reported usage', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const file = `${root}/define.json`;
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        feature: 'f',
+        clarity: 0.9,
+        criteria: ['AC-1'],
+        usage: { tier: 'sonnet', tokens_in: 100, tokens_out: 50 },
+      })
+    );
+    const c = await cli(['--root', root, 'complete', 'define', '--handoff', file]);
+    expect(c.code).toBe(0);
+    const r = await cli(['--root', root, 'trace']);
+    expect(r.json.summary.completed).toBe(1);
+    expect(r.json.summary.tier_histogram.sonnet).toBe(1);
+    expect(r.json.summary.reported_tokens).toEqual({ tokens_in: 100, tokens_out: 50 });
+  });
+
+  it('trace counts a completion without usage as unreported, tokens stay null', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const file = `${root}/define.json`;
+    fs.writeFileSync(file, JSON.stringify({ feature: 'f', clarity: 0.9, criteria: ['AC-1'] }));
+    await cli(['--root', root, 'complete', 'define', '--handoff', file]);
+    const r = await cli(['--root', root, 'trace']);
+    expect(r.json.summary.reported_tokens).toBe(null);
+    expect(r.json.summary.tier_histogram.unreported).toBe(1);
+  });
+
+  it('trace records a gate verdict once and de-dupes an identical re-run', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    await cli(['--root', root, 'gate', 'G_DEFINE']); // blocks (exit 1)
+    await cli(['--root', root, 'gate', 'G_DEFINE']); // identical re-run → no new event
+    const r = await cli(['--root', root, 'trace']);
+    const gateEvents = r.json.events.filter((e: any) => e.kind === 'gate' && e.gate === 'G_DEFINE');
+    expect(gateEvents.length).toBe(1);
+    expect(gateEvents[0].passed).toBe(false);
+    expect(r.json.summary.gates.blocked).toBe(1);
+  });
+
+  it('trace requires a run (exit 2 before init)', async () => {
+    const r = await cli(['--root', root, 'trace']);
+    expect(r.code).toBe(2);
+  });
+
+  // --- spin budget: token accounting (Measured Harness, Fase 3) ---
+
+  it('budget reports null spend on a fresh run (exit 0)', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const r = await cli(['--root', root, 'budget']);
+    expect(r.code).toBe(0);
+    expect(r.json.reported).toBe(null);
+    expect(r.json.over_budget).toBe(false);
+  });
+
+  it('budget sums reported usage per tier and flags over_budget but stays advisory (exit 0)', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const file = `${root}/define.json`;
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        feature: 'f',
+        clarity: 0.9,
+        criteria: ['AC-1'],
+        usage: { tier: 'opus', tokens_in: 800, tokens_out: 400 },
+      })
+    );
+    await cli(['--root', root, 'complete', 'define', '--handoff', file]);
+    const r = await cli(['--root', root, 'budget', '--max-tokens', '1000']);
+    expect(r.code).toBe(0); // advisory — never blocks legitimate spend
+    expect(r.json.reported.total).toBe(1200);
+    expect(r.json.by_tier.opus.tokens_in).toBe(800);
+    expect(r.json.over_budget).toBe(true);
+    expect(r.json.warning).toContain('exceeds');
+  });
+
+  it('budget rejects a non-numeric --max-tokens (exit 2)', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const r = await cli(['--root', root, 'budget', '--max-tokens', 'lots']);
+    expect(r.code).toBe(2);
+  });
+
+  // --- spin approve: inviolable human sign-off (A1) ---
+
+  it('approve refuses without an interactive TTY — an agent cannot approve', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const r = await cli(['--root', root, 'approve']);
+    expect(r.code).toBe(2);
+    expect(r.json.error).toContain('interactive');
+  });
+
+  it('approve records sign-off when run from a TTY, and spin state shows it', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const orig = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    try {
+      const r = await cli(['--root', root, 'approve', '--by', 'ivis']);
+      expect(r.code).toBe(0);
+      expect(r.json.approved).toBe(true);
+      expect(r.json.by).toBe('ivis');
+    } finally {
+      if (orig) Object.defineProperty(process.stdin, 'isTTY', orig);
+    }
+    const state = await cli(['--root', root, 'state']);
+    expect(state.json.approval.by).toBe('ivis');
+  });
 });

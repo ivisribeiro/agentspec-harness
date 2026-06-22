@@ -26,6 +26,13 @@ describe('ArtifactGraph (ported OpenSpec spine)', () => {
     expect(g.getBuildOrder()).toEqual(['define', 'design', 'build', 'ship']);
   });
 
+  it('computes the downstream closure (getDownstream) for the iterate cascade', () => {
+    const g = ArtifactGraph.fromYamlContent(SDD_YAML);
+    expect(g.getDownstream(['design'])).toEqual(['build', 'design', 'ship']);
+    expect(g.getDownstream(['ship'])).toEqual(['ship']);
+    expect(g.getDownstream(['define'])).toEqual(['build', 'define', 'design', 'ship']);
+  });
+
   it('returns only the ready artifacts given completed set', () => {
     const g = ArtifactGraph.fromYamlContent(SDD_YAML);
     expect(g.getNextArtifacts(new Set())).toEqual(['define']);

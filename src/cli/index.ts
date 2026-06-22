@@ -7,6 +7,11 @@ import {
   nextHandler,
   orderHandler,
   completeHandler,
+  traceHandler,
+  budgetHandler,
+  fanoutCheckHandler,
+  kbInstallHandler,
+  mergeFindingsHandler,
   validateHandler,
   gateHandler,
   diffCriteriaHandler,
@@ -20,6 +25,9 @@ import {
   configDriftHandler,
   explainHandler,
   specDriftHandler,
+  evalHandler,
+  approveHandler,
+  invalidateHandler,
   type HandlerResult,
 } from '../commands/handlers.js';
 
@@ -43,7 +51,7 @@ export async function runCli(
   const program = new Command();
   program
     .name('spin')
-    .description('AgentSpec Harness — deterministic spec-driven orchestration spine')
+    .description('Spindle — deterministic spec-driven orchestration spine')
     .version('0.1.0')
     .option('--root <dir>', 'project root containing .spindle/ (default: cwd)')
     .enablePositionalOptions();
@@ -78,10 +86,47 @@ export async function runCli(
     });
 
   program
+    .command('trace')
+    .description('print the recorded run-ledger timeline + a tier/token summary (pure read, exit 0)')
+    .action(function (this: Command) {
+      emit(traceHandler(root(this)));
+    });
+
+  program
+    .command('budget')
+    .description('reconcile reported token spend per tier against an optional ceiling (advisory; always exit 0)')
+    .option('--max-tokens <n>', 'advisory ceiling; sets over_budget when reported spend exceeds it')
+    .action(function (this: Command, opts) {
+      emit(budgetHandler(root(this), opts));
+    });
+
+  program
+    .command('fanout-check')
+    .description('assert no parallel_group is partially complete (a dropped fan-out worker); exit 0 all-consistent / 1 partial')
+    .action(function (this: Command) {
+      emit(fanoutCheckHandler(root(this)));
+    });
+
+  program
     .command('complete <id>')
     .option('--handoff <file>', 'worker-output JSON sidecar to validate')
     .action(function (this: Command, id, opts) {
       emit(completeHandler(root(this), id, opts));
+    });
+
+  program
+    .command('invalidate <id>')
+    .description('after editing a gated artifact: drop it + its downstream closure from the ledger and void all gate verdicts + approval, so no stale-green survives (the /iterate cascade)')
+    .action(function (this: Command, id) {
+      emit(invalidateHandler(root(this), id));
+    });
+
+  program
+    .command('approve')
+    .description('record human sign-off (required by G_SHIP). Refuses unless run in an interactive terminal — an agent cannot approve')
+    .option('--by <name>', 'approver name (defaults to $USER)')
+    .action(function (this: Command, opts) {
+      emit(approveHandler(root(this), opts));
     });
 
   program
@@ -94,17 +139,29 @@ export async function runCli(
     .command('gate <gateId>')
     .option('--agents <dir>', 'agents dir (G_ROUTER_COVERAGE)')
     .option('--routing <file>', 'routing.json (G_ROUTER_COVERAGE)')
+    .option('--kb <dir>', 'kb dir for kb_domains referential check (G_ROUTER_COVERAGE; default plugin/kb)')
     .option('--findings <file>', 'findings.json (G_REVIEW_BLOCK)')
+    .option('--min-sources <n>', 'G_REVIEW_BLOCK: require >=n distinct review sources')
     .option('--handoff <file>', 'audit.json sidecar (G_AUDIT)')
     .option('--audit <file>', 'audit.json sidecar (G_OPS_CONFIG, G_PLAN)')
     .action(function (this: Command, gateId, opts) {
       const args: Record<string, string> = {};
       if (opts.agents) args.agents = opts.agents;
       if (opts.routing) args.routing = opts.routing;
+      if (opts.kb) args.kb = opts.kb;
       if (opts.findings) args.findings = opts.findings;
+      if (opts.minSources) args['min-sources'] = opts.minSources;
       if (opts.handoff) args.handoff = opts.handoff;
       if (opts.audit) args.audit = opts.audit;
       emit(gateHandler(root(this), gateId, args));
+    });
+
+  program
+    .command('merge-findings <files...>')
+    .description('deterministically merge N finding files (dedup by file+line+rule, keep higher severity, aggregate sources) into one {findings,sources} for G_REVIEW_BLOCK')
+    .option('--out <file>', 'write the merged result here (else stdout)')
+    .action(function (this: Command, files, opts) {
+      emit(mergeFindingsHandler(root(this), files, opts));
     });
 
   program
@@ -157,6 +214,15 @@ export async function runCli(
     });
 
   program
+    .command('kb-install <domain>')
+    .description('publish a generated KB domain (flat layout) from .spindle/ into plugin/kb/ so kb_domains resolves; pure file copy, exit 1 if the source is incomplete')
+    .option('--from <dir>', 'source dir (default .spindle/features/<domain>)')
+    .option('--dest <dir>', 'destination kb root (default plugin/kb)')
+    .action(function (this: Command, domain, opts) {
+      emit(kbInstallHandler(root(this), domain, opts));
+    });
+
+  program
     .command('schema <action> [handoffId]')
     .description('show | validate the active workflow schema; `show <handoff-id>` describes a handoff JSON shape')
     .action(function (this: Command, action, handoffId) {
@@ -186,6 +252,17 @@ export async function runCli(
     .requiredOption('--audit <file>', 'audit handoff JSON to reconcile')
     .action(function (this: Command, opts) {
       emit(reconcileHandler(opts));
+    });
+
+  program
+    .command('eval')
+    .description(
+      'replay the eval corpus through the real gates; exit 1 on any verdict regression (--strict also requires every gate to have a pass+block case)'
+    )
+    .option('--corpus <dir>', 'eval corpus dir (default: bundled schemas/evals)')
+    .option('--strict', 'also fail if any registry gate lacks a pass+block fixture')
+    .action(function (this: Command, opts) {
+      emit(evalHandler(opts));
     });
 
   program

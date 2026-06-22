@@ -166,7 +166,7 @@ Assumptions that if wrong could invalidate the design:
 - 2 = Clear but missing details
 - 3 = Crystal clear, actionable
 
-**Minimum to proceed: 12/15**
+**Target: 12/15 on the rubric below — recorded to the handoff as `clarity` on a 0..1 scale. `G_DEFINE` blocks below `config.clarity_floor` only when the schema sets that knob.**
 
 ---
 

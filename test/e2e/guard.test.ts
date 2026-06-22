@@ -16,6 +16,16 @@ const FORBIDDEN: Array<{ re: RegExp; why: string }> = [
   { re: /from\s+['"]@anthropic/, why: 'Anthropic SDK import' },
   { re: /require\(\s*['"]@anthropic/, why: 'Anthropic SDK require' },
   { re: /openai/i, why: 'model provider SDK' },
+  // Measured Harness doctrine: the CLI RECORDS model-reported usage (opaque numbers
+  // handed in via handoff sidecars) but must NEVER compute or price tokens itself. A
+  // tokenizer or pricing table in src/ is model-awareness even with no network call.
+  { re: /tiktoken/i, why: 'tokenizer library (token estimation)' },
+  { re: /\bestimateTokens?\b/i, why: 'token estimation in the CLI' },
+  { re: /\bcountTokens?\b/i, why: 'token counting in the CLI' },
+  { re: /(?:price|cost)Per[A-Za-z]*token/i, why: 'token pricing in the CLI' },
+  { re: /tokensPer(?:Dollar|Usd|Cent)/i, why: 'token pricing in the CLI' },
+  { re: /usd_?per_?(?:token|1k|million|mtok)/i, why: 'token pricing in the CLI' },
+  { re: /PRICE_PER|PRICING_TABLE/, why: 'pricing table in the CLI' },
 ];
 
 function tsFiles(dir: string): string[] {

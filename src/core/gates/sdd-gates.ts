@@ -58,6 +58,15 @@ export function gDefine(ctx: GateContext): GateResult {
     if (!check.ok) {
       reasons.push(`define handoff invalid: ${check.errors.join('; ')}`);
       unmet.push('handoff:define');
+    } else {
+      // Optional config-driven clarity floor: turn the recorded 0..1 clarity into a
+      // verdict when the schema declares a floor. UNSET => not enforced (additive).
+      const floor = ctx.graph?.getSchema().config?.clarity_floor;
+      const clarity = (check.data as { clarity?: number }).clarity;
+      if (typeof floor === 'number' && typeof clarity === 'number' && clarity < floor) {
+        reasons.push(`clarity ${clarity} is below the configured floor ${floor}`);
+        unmet.push('clarity-floor');
+      }
     }
   }
 
@@ -110,6 +119,7 @@ interface BuildResults {
     correction?: string;
     reconciled?: boolean;
     verified_by?: string;
+    verified_by_result?: 'passed' | 'failed';
   }>;
 }
 
@@ -195,6 +205,23 @@ export function gBuild(ctx: GateContext): GateResult {
     }
   }
 
+  // Tests at build. The spine READS the CI-produced verifier result; it never runs a
+  // verifier (execution lives in CI, the result flows in as data). Two checks:
+  const requireVerifier = ctx.graph?.getSchema().config?.require_verified_by === true;
+  for (const r of buildRes?.results ?? []) {
+    if (r.status !== 'passed') continue;
+    // (a) a passed criterion may not claim a verifier CI reported as failed.
+    if (r.verified_by_result === 'failed') {
+      reasons.push(`acceptance criterion ${r.criterion} is marked passed but its verifier reported failed`);
+      unmet.push(`verifier-failed:${r.criterion}`);
+    }
+    // (b) when the schema requires it, every passed criterion must cite a verifier (a test).
+    if (requireVerifier && !r.verified_by) {
+      reasons.push(`acceptance criterion ${r.criterion} is passed but cites no verifier (config.require_verified_by)`);
+      unmet.push(`missing-verifier:${r.criterion}`);
+    }
+  }
+
   return unmet.length === 0 ? pass(gate, ['build verified']) : block(gate, reasons, unmet);
 }
 
@@ -232,7 +259,19 @@ export function gShip(ctx: GateContext): GateResult {
   // Criteria are met — but surface any spec-drift the build flagged (F6). Shipping
   // is allowed (the correction is legitimate), yet the warning is recorded loudly
   // in the gate reasons + run-state so a false DEFINE can't ride along unnoticed.
-  const reasons = [`all ${define.criteria.length} acceptance criteria met`];
+  // Final sign-off: criteria are met, but ship requires un-fakeable human approval
+  // (set only by `spin approve` at an interactive terminal — the seam applied to ship).
+  if (!ctx.runState?.approval) {
+    return block(
+      gate,
+      ['human approval required — run `spin approve` (an automated agent cannot grant it)'],
+      ['approval']
+    );
+  }
+  const reasons = [
+    `all ${define.criteria.length} acceptance criteria met`,
+    `approved by ${ctx.runState.approval.by}`,
+  ];
   const drift = specDrift(buildRes?.results ?? []);
   if (!drift.clean) {
     reasons.push(

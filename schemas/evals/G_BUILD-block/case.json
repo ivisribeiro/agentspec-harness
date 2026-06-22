@@ -1,0 +1,7 @@
+{
+  "id": "G_BUILD-block",
+  "gate": "G_BUILD",
+  "expect": "block",
+  "args": {},
+  "note": "manifest declares missing.txt which was not built (unmet: missing.txt)"
+}

@@ -1,0 +1,7 @@
+{
+  "id": "G_PLAN-pass",
+  "gate": "G_PLAN",
+  "expect": "pass",
+  "args": { "audit": "audit.json" },
+  "note": "task detail names a real path, is single-domain, and addresses the blocking gap"
+}

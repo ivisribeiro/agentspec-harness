@@ -1,0 +1,7 @@
+{
+  "id": "G_OPS_CONFIG-block",
+  "gate": "G_OPS_CONFIG",
+  "expect": "block",
+  "args": { "audit": "audit.json" },
+  "note": "a control with an unsafe code default and no verified prod override (RLS-inert class)"
+}

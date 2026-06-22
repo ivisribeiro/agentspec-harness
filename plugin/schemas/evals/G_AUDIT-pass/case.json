@@ -1,0 +1,7 @@
+{
+  "id": "G_AUDIT-pass",
+  "gate": "G_AUDIT",
+  "expect": "pass",
+  "args": { "handoff": "audit.json" },
+  "note": "every built item carries file + proof evidence"
+}

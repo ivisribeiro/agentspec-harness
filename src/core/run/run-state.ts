@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { RunStateSchema, type RunState, type GateRecord } from './run-state.schema.js';
+import { RunStateSchema, type RunState, type GateRecord, type RunEvent, type Usage } from './run-state.schema.js';
 
 // Atomic, Zod-validated read/write of .spindle/run.json. This module is the single
 // writer of run-state. The LLM never writes here; it only triggers CLI commands
@@ -95,16 +95,31 @@ export function initRunState(root: string, schema: string, feature: string): Run
     completed: [],
     retries: {},
     gates: {},
+    events: [],
+    approval: null,
     createdAt: ts,
     updatedAt: ts,
   };
   return saveRunState(root, state);
 }
 
-export function markComplete(root: string, id: string): RunState {
+/** Record human sign-off. Called by `spin approve`, which gates on an interactive TTY
+ *  so an automated agent cannot reach this path. G_SHIP requires the result. */
+export function markApproved(root: string, by: string): RunState {
   const state = loadRunState(root);
+  const at = nowIso();
+  state.approval = { at, by };
+  state.events = [...state.events, { kind: 'approve', at, by }];
+  return saveRunState(root, state);
+}
+
+export function markComplete(root: string, id: string, usage?: Usage): RunState {
+  const state = loadRunState(root);
+  // Append a 'complete' event only when the id is NEWLY completed, so re-running
+  // `spin complete <id>` on an already-done artifact stays idempotent on the ledger.
   if (!state.completed.includes(id)) {
     state.completed = [...state.completed, id].sort();
+    state.events = [...state.events, { kind: 'complete', at: nowIso(), id, ...(usage ? { usage } : {}) }];
   }
   return saveRunState(root, state);
 }
@@ -113,8 +128,22 @@ export function markIncomplete(root: string, ids: string[]): RunState {
   const state = loadRunState(root);
   const drop = new Set(ids);
   state.completed = state.completed.filter((c) => !drop.has(c));
-  // Re-gating: drop any gate records that referenced dropped artifacts is the
-  // caller's concern; here we just clear the completed flags.
+  // Re-gating invalidates a prior human sign-off — work changed since approval, so the
+  // approval is stale and G_SHIP must require a fresh `spin approve`.
+  if (ids.length > 0) state.approval = null;
+  return saveRunState(root, state);
+}
+
+/** Invalidate a set of artifacts after an edit (the /iterate cascade). Drops them from
+ *  completed[], and — conservatively — voids ALL gate verdicts and the human approval, so
+ *  no stale-green verdict survives an edit. Gates re-run cheaply and deterministically; the
+ *  caller passes the downstream closure (graph.getDownstream) so dependents re-gate too. */
+export function invalidate(root: string, ids: string[]): RunState {
+  const state = loadRunState(root);
+  const drop = new Set(ids);
+  state.completed = state.completed.filter((c) => !drop.has(c));
+  state.gates = {};
+  state.approval = null;
   return saveRunState(root, state);
 }
 
@@ -127,16 +156,30 @@ export function incRetry(root: string, id: string): number {
   const state = loadRunState(root);
   const next = (state.retries[id] ?? 0) + 1;
   state.retries = { ...state.retries, [id]: next };
+  // A retry is always a genuine state change (a deliberate counter bump), so every
+  // increment is its own event.
+  state.events = [...state.events, { kind: 'retry', at: nowIso(), id, attempt: next }];
   saveRunState(root, state);
   return next;
 }
 
 export function recordGate(root: string, gateId: string, record: Omit<GateRecord, 'at'>): RunState {
   const state = loadRunState(root);
-  state.gates = {
-    ...state.gates,
-    [gateId]: { passed: record.passed, reasons: record.reasons ?? [], at: nowIso() },
-  };
+  const at = nowIso();
+  const reasons = record.reasons ?? [];
+  state.gates = { ...state.gates, [gateId]: { passed: record.passed, reasons, at } };
+  // Append to the trajectory only when the verdict CHANGES from the last recorded
+  // verdict for this gate. Re-running an unchanged gate adds no event, so the ledger
+  // (and thus `spin trace`) is idempotent on re-run.
+  const priorForGate = state.events.filter(
+    (e): e is Extract<RunEvent, { kind: 'gate' }> => e.kind === 'gate' && e.gate === gateId
+  );
+  const last = priorForGate[priorForGate.length - 1];
+  const changed =
+    !last || last.passed !== record.passed || JSON.stringify(last.reasons) !== JSON.stringify(reasons);
+  if (changed) {
+    state.events = [...state.events, { kind: 'gate', at, gate: gateId, passed: record.passed, reasons }];
+  }
   return saveRunState(root, state);
 }
 
