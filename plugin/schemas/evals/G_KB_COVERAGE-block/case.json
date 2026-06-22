@@ -1,0 +1,7 @@
+{
+  "id": "G_KB_COVERAGE-block",
+  "gate": "G_KB_COVERAGE",
+  "expect": "block",
+  "args": {},
+  "note": "concept alpha has zero test cases, min 1 (unmet: test-cases:alpha)"
+}

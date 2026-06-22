@@ -42,7 +42,7 @@ spin  ─── deterministic spine ───  never calls a model
 Routing *predicts*, gates *block* — and a third deterministic layer **measures** whether either was right, closing the loop back into the harness. All of it is pure, offline reads over `.spindle/`; the model-free guard forbids tokenizers and pricing in `src/` so measurement can never grow model-awareness.
 
 - **`spin trace`** — the run-ledger: an append-only `events[]` timeline (`complete`/`gate`/`retry`) with a tier histogram and summed reported tokens. A pure read, exit 0.
-- **`spin eval`** — replays a corpus of recorded fixtures through the **real** gate functions; a gate that stops blocking what it used to block is a regression CI catches, with no model and no network. `--strict` is fail-closed on incomplete gate coverage.
+- **`spin eval`** — replays a corpus of recorded fixtures through the **real** gate functions; a gate that stops blocking what it used to block is a regression CI catches, with no model and no network. `--strict` is fail-closed on incomplete coverage — and the bundled corpus now covers **all 11 registry gates** with a pass *and* a block fixture, so `npm run eval` runs `--strict` green in CI (a new gate without fixtures fails the build).
 - **`spin budget`** — reconciles model-reported token spend per tier against an optional ceiling. **Accounting, not enforcement:** advisory, always exit 0 — a genuinely expensive task should cost a lot, and the spine cannot independently verify a self-reported count.
 
 See [`docs/MEASUREMENT.md`](docs/MEASUREMENT.md) for the doctrine and its honest limits.

@@ -7,3 +7,11 @@ coverage/
 # dist/ IS committed — it is the self-contained bundle the plugin ships (deps
 # inlined, runs offline). Rebuild with `npm run build`.
 !dist/
+
+# Eval fixtures intentionally ship a .spindle/ state tree: the state-coupled gates
+# (G_DEFINE/DESIGN/BUILD/SHIP, G_KB_*) read run.json + schema.yaml + artifacts, so
+# `spin eval` needs the tree committed — in BOTH the repo corpus (schemas/evals) and
+# the bundled plugin mirror (plugin/schemas/evals, synced by build.js). Re-include it
+# past the global .spindle/ ignore. Regenerate with: node scripts/gen-eval-fixtures.mjs
+!**/evals/**/.spindle/
+!**/evals/**/.spindle/**

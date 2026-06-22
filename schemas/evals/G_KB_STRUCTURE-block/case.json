@@ -1,0 +1,7 @@
+{
+  "id": "G_KB_STRUCTURE-block",
+  "gate": "G_KB_STRUCTURE",
+  "expect": "block",
+  "args": {},
+  "note": "manifest.json is missing (unmet: manifest.json)"
+}

@@ -1,0 +1,7 @@
+{
+  "id": "G_KB_STRUCTURE-pass",
+  "gate": "G_KB_STRUCTURE",
+  "expect": "pass",
+  "args": {},
+  "note": "index + quick-reference + valid manifest + a concept file"
+}

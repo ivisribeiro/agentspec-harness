@@ -1,0 +1,7 @@
+{
+  "id": "G_KB_COVERAGE-pass",
+  "gate": "G_KB_COVERAGE",
+  "expect": "pass",
+  "args": {},
+  "note": "every manifest concept has a file and >=1 test case"
+}

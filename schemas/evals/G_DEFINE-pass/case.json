@@ -1,0 +1,7 @@
+{
+  "id": "G_DEFINE-pass",
+  "gate": "G_DEFINE",
+  "expect": "pass",
+  "args": {},
+  "note": "all sections present + a valid define handoff"
+}

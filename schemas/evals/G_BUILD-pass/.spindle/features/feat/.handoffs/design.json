@@ -1,0 +1,12 @@
+{
+  "feature": "feat",
+  "manifest": [
+    {
+      "file": "built.txt",
+      "action": "create",
+      "purpose": "implement"
+    }
+  ],
+  "decisions": [],
+  "technologies": []
+}
