@@ -134,8 +134,15 @@ between `src/`+`schemas/` and `plugin/`.
 | `spin merge-findings <files...> [--out f]` | deterministically merge N finding files (dedup file+line+rule, keep higher severity, aggregate sources) into one `{findings,sources}` for `G_REVIEW_BLOCK` |
 | `spin kb-install <domain> [--from d] [--dest d]` | publish a complete flat KB domain from `.spindle/` into `plugin/kb/` (pure copy) so `kb_domains` resolves; exit 1 if the source is incomplete |
 | `spin retry <id> --inc \| --ok` | retry counter vs `config.build_retry_cap`; `--ok` exits 1 at ceiling |
+| `spin status` | alias for `spin state` — the `run.json` ledger |
 | `spin route <taskKind> [--budget std\|low]` | `{ tier, model, reason }` |
+| `spin tier [--risk low\|medium\|high] [--breadth single\|few\|many] [--mechanical] [--have-context] [--reversible] [--irreversible]` | classify a task into orchestration tier (T0/T1/T2) from its signals; always exit 0 |
+| `spin kinds` | list all known routing task-kinds |
 | `spin schema show \| validate` | inspect / validate the active editable schema |
+| `spin explain <gateId>` | print what a gate reads, what blocks it, and which flags apply; always exit 0 |
+| `spin reconcile --audit <file>` | detect doc-vs-code drift in an audit handoff; exit 1 if inconsistent/drift items exist |
+| `spin config-drift --declared <list> --present <list>` | detect tools declared in CI but absent from the lockfile (comma-separated lists); exit 1 if any are missing |
+| `spin spec-drift --build <file>` | surface acceptance criteria the build CORRECTED vs DEFINE (criteria delta); exit 1 if any spec drift is unreconciled |
 
 ---
 
@@ -154,7 +161,17 @@ is Zod-validated; E-1: a `needs_decoding` concept must carry a non-empty
 kb_domains referential integrity — every declared domain must resolve to a
 `--kb`/`plugin/kb` dir; existence, NOT usage proof),
 `G_REVIEW_BLOCK` (surviving CRITICAL findings > 0 ⇒ block; shared by /review and
-/migrate), `G_HANDOFF` (enforced inside `spin complete --handoff`).
+/migrate), `G_AUDIT` (guards the brownfield audit artifact — blocks if any `built[]`
+item lacks `evidence.files` or `evidence.proof`, any gap has no valid priority, or
+the audit is empty; makes "the LLM wrote done in prose" un-gameable; reads
+`--handoff` or `.handoffs/audit.json`), `G_OPS_CONFIG` (blocks when any
+`opsReadiness` control has `enforced=false` — a flag whose unsafe code default was
+not verified in an env file; "feature ready but flag off in prod" becomes exit 1;
+reads `--audit` or `.handoffs/audit.json`), `G_PLAN` (blocks before /build on:
+(a) a `proposedTask` whose `detail` carries no falsifiable file-path or command
+token — vague prose tasks; (b) an L/XL effort task spanning >1 domain — must be
+split; (c) a blocking gap in `gaps[]` that no proposed task addresses; reads
+`--audit` or `.handoffs/audit.json`), `G_HANDOFF` (enforced inside `spin complete --handoff`).
 
 **Handoff schema ids** (the `handoff:` field / `spin complete --handoff` /
 `spin handoff-check`):

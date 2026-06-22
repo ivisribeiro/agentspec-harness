@@ -126,7 +126,7 @@ Based on file analysis, identify the primary change type:
 | `.github/**`, `Makefile`, `pyproject.toml` | `chore:` |
 | `${CLAUDE_PLUGIN_ROOT}/agents/**` | `refactor(agents):` |
 | `${CLAUDE_PLUGIN_ROOT}/kb/**` | `docs(kb):` |
-| `.claude/sdd/**` | `docs(sdd):` |
+| `.spindle/**` | `docs(sdd):` |
 
 ### Step 3: Generate Commit Message
 
@@ -315,7 +315,7 @@ BRANCH
 |-------|------------|
 | `agents` | `${CLAUDE_PLUGIN_ROOT}/agents/**` |
 | `kb` | `${CLAUDE_PLUGIN_ROOT}/kb/**` |
-| `sdd` | `.claude/sdd/**` |
+| `sdd` | `.spindle/**` |
 | `commands` | `${CLAUDE_PLUGIN_ROOT}/commands/**` |
 | `handlers` | `src/handlers/**` |
 | `services` | `src/services/**` |
@@ -401,5 +401,5 @@ BRANCH
 
 - Review Command: `${CLAUDE_PLUGIN_ROOT}/commands/review/review.md`
 - Code Reviewer Agent: `${CLAUDE_PLUGIN_ROOT}/agents/python/code-reviewer.md`
-- Workflow: `${CLAUDE_PLUGIN_ROOT}/sdd/_index.md`
+- Workflow schema: `${CLAUDE_PLUGIN_ROOT}/schemas/sdd/schema.yaml`
 - Agents: `${CLAUDE_PLUGIN_ROOT}/agents/workflow/`

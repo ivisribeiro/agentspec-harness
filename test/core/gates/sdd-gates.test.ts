@@ -87,6 +87,34 @@ describe('G_DESIGN', () => {
     writeHandoff('design', { feature: 'feat', manifest: [{ file: 'a.ts', action: 'create', purpose: 'p' }] });
     expect(gDesign(ctx).passed).toBe(true);
   });
+
+  it('blocks when the DESIGN artifact is absent on disk', () => {
+    const r = gDesign(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('DESIGN.md');
+  });
+
+  it('blocks when a required section is missing', () => {
+    writeArtifact(
+      'DESIGN.md',
+      '## Overview\nx\n## File Manifest\n\n| File | Action | Purpose |\n| --- | --- | --- |\n| a.ts | create | p |\n'
+    ); // no Decisions section
+    writeHandoff('design', { feature: 'feat', manifest: [{ file: 'a.ts', action: 'create', purpose: 'p' }] });
+    const r = gDesign(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('section:Decisions');
+  });
+
+  it('blocks when the design handoff is invalid', () => {
+    writeArtifact(
+      'DESIGN.md',
+      '## Overview\nx\n## File Manifest\n\n| File | Action | Purpose |\n| --- | --- | --- |\n| a.ts | create | p |\n\n## Decisions\nd\n'
+    );
+    writeHandoff('design', { feature: 'feat', manifest: [] }); // empty manifest is invalid
+    const r = gDesign(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('handoff:design');
+  });
 });
 
 describe('G_BUILD (replaces the prose checkbox)', () => {
@@ -270,6 +298,34 @@ describe('G_BUILD (replaces the prose checkbox)', () => {
       });
       expect(gBuild(ctx).passed, `verified_by=${v} should not false-block`).toBe(true);
     }
+  });
+
+  it('BLOCKS when reported test coverage is below its threshold (coverage floor)', () => {
+    buildAllFiles();
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed' },
+        { criterion: 'AC-2', status: 'passed' },
+      ],
+      coverage: { tool: 'vitest', pct: 50, threshold: 80 },
+    });
+    const r = gBuild(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('coverage-below-threshold');
+  });
+
+  it('PASSES when reported coverage meets its threshold', () => {
+    buildAllFiles();
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed' },
+        { criterion: 'AC-2', status: 'passed' },
+      ],
+      coverage: { tool: 'vitest', pct: 92, threshold: 80 },
+    });
+    expect(gBuild(ctx).passed).toBe(true);
   });
 });
 
