@@ -191,4 +191,61 @@ describe('spin CLI exit-code ABI', () => {
     const criteria = r.json.fields.find((f: any) => f.name === 'criteria');
     expect((criteria.constraints ?? []).join(' ')).toContain('AC-');
   });
+
+  // --- the run-ledger: spin trace (Measured Harness, Fase 1) ---
+
+  it('trace on a fresh run is empty and exits 0', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const r = await cli(['--root', root, 'trace']);
+    expect(r.code).toBe(0);
+    expect(r.json.events).toEqual([]);
+    expect(r.json.summary.completed).toBe(0);
+    expect(r.json.summary.reported_tokens).toBe(null);
+  });
+
+  it('trace records a complete event with opaque model-reported usage', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const file = `${root}/define.json`;
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        feature: 'f',
+        clarity: 0.9,
+        criteria: ['AC-1'],
+        usage: { tier: 'sonnet', tokens_in: 100, tokens_out: 50 },
+      })
+    );
+    const c = await cli(['--root', root, 'complete', 'define', '--handoff', file]);
+    expect(c.code).toBe(0);
+    const r = await cli(['--root', root, 'trace']);
+    expect(r.json.summary.completed).toBe(1);
+    expect(r.json.summary.tier_histogram.sonnet).toBe(1);
+    expect(r.json.summary.reported_tokens).toEqual({ tokens_in: 100, tokens_out: 50 });
+  });
+
+  it('trace counts a completion without usage as unreported, tokens stay null', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const file = `${root}/define.json`;
+    fs.writeFileSync(file, JSON.stringify({ feature: 'f', clarity: 0.9, criteria: ['AC-1'] }));
+    await cli(['--root', root, 'complete', 'define', '--handoff', file]);
+    const r = await cli(['--root', root, 'trace']);
+    expect(r.json.summary.reported_tokens).toBe(null);
+    expect(r.json.summary.tier_histogram.unreported).toBe(1);
+  });
+
+  it('trace records a gate verdict once and de-dupes an identical re-run', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    await cli(['--root', root, 'gate', 'G_DEFINE']); // blocks (exit 1)
+    await cli(['--root', root, 'gate', 'G_DEFINE']); // identical re-run → no new event
+    const r = await cli(['--root', root, 'trace']);
+    const gateEvents = r.json.events.filter((e: any) => e.kind === 'gate' && e.gate === 'G_DEFINE');
+    expect(gateEvents.length).toBe(1);
+    expect(gateEvents[0].passed).toBe(false);
+    expect(r.json.summary.gates.blocked).toBe(1);
+  });
+
+  it('trace requires a run (exit 2 before init)', async () => {
+    const r = await cli(['--root', root, 'trace']);
+    expect(r.code).toBe(2);
+  });
 });

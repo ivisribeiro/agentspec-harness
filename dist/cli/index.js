@@ -20432,6 +20432,24 @@ var GateRecord = external_exports.object({
   at: external_exports.string(),
   reasons: external_exports.array(external_exports.string()).default([])
 });
+var Usage = external_exports.object({
+  tier: external_exports.string().optional(),
+  // reported routed tier: 'haiku' | 'sonnet' | 'opus'
+  model: external_exports.string().optional(),
+  tokens_in: external_exports.number().int().nonnegative().optional(),
+  tokens_out: external_exports.number().int().nonnegative().optional()
+});
+var RunEvent = external_exports.discriminatedUnion("kind", [
+  external_exports.object({ kind: external_exports.literal("complete"), at: external_exports.string(), id: external_exports.string(), usage: Usage.optional() }),
+  external_exports.object({
+    kind: external_exports.literal("gate"),
+    at: external_exports.string(),
+    gate: external_exports.string(),
+    passed: external_exports.boolean(),
+    reasons: external_exports.array(external_exports.string()).default([])
+  }),
+  external_exports.object({ kind: external_exports.literal("retry"), at: external_exports.string(), id: external_exports.string(), attempt: external_exports.number().int().nonnegative() })
+]);
 var RunStateSchema = external_exports.object({
   version: external_exports.literal(1).default(1),
   schema: external_exports.string(),
@@ -20441,6 +20459,8 @@ var RunStateSchema = external_exports.object({
   completed: external_exports.array(external_exports.string()).default([]),
   retries: external_exports.record(external_exports.string(), external_exports.number().int().nonnegative()).default({}),
   gates: external_exports.record(external_exports.string(), GateRecord).default({}),
+  // Append-only trajectory. `.default([])` keeps pre-ledger run.json files valid.
+  events: external_exports.array(RunEvent).default([]),
   createdAt: external_exports.string(),
   updatedAt: external_exports.string()
 });
@@ -20517,15 +20537,17 @@ function initRunState(root, schema, feature) {
     completed: [],
     retries: {},
     gates: {},
+    events: [],
     createdAt: ts,
     updatedAt: ts
   };
   return saveRunState(root, state);
 }
-function markComplete(root, id) {
+function markComplete(root, id, usage2) {
   const state = loadRunState(root);
   if (!state.completed.includes(id)) {
     state.completed = [...state.completed, id].sort();
+    state.events = [...state.events, { kind: "complete", at: nowIso(), id, ...usage2 ? { usage: usage2 } : {} }];
   }
   return saveRunState(root, state);
 }
@@ -20537,15 +20559,23 @@ function incRetry(root, id) {
   const state = loadRunState(root);
   const next = (state.retries[id] ?? 0) + 1;
   state.retries = { ...state.retries, [id]: next };
+  state.events = [...state.events, { kind: "retry", at: nowIso(), id, attempt: next }];
   saveRunState(root, state);
   return next;
 }
 function recordGate(root, gateId, record) {
   const state = loadRunState(root);
-  state.gates = {
-    ...state.gates,
-    [gateId]: { passed: record.passed, reasons: record.reasons ?? [], at: nowIso() }
-  };
+  const at = nowIso();
+  const reasons = record.reasons ?? [];
+  state.gates = { ...state.gates, [gateId]: { passed: record.passed, reasons, at } };
+  const priorForGate = state.events.filter(
+    (e) => e.kind === "gate" && e.gate === gateId
+  );
+  const last = priorForGate[priorForGate.length - 1];
+  const changed = !last || last.passed !== record.passed || JSON.stringify(last.reasons) !== JSON.stringify(reasons);
+  if (changed) {
+    state.events = [...state.events, { kind: "gate", at, gate: gateId, passed: record.passed, reasons }];
+  }
   return saveRunState(root, state);
 }
 function completedSet(root) {
@@ -22022,6 +22052,50 @@ function stateHandler(root) {
   if (!runStateExists(root)) return usage('no run state \u2014 run "spin init" first');
   return ok(loadRunState(root));
 }
+function traceHandler(root) {
+  if (!runStateExists(root)) return usage('no run state \u2014 run "spin init" first');
+  const state = loadRunState(root);
+  const events = state.events;
+  const completes = events.filter(
+    (e) => e.kind === "complete"
+  );
+  const gates = events.filter((e) => e.kind === "gate");
+  const retries = events.filter((e) => e.kind === "retry");
+  const tierHistogram = {};
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let anyTokensReported = false;
+  for (const c of completes) {
+    const tier = c.usage?.tier ?? "unreported";
+    tierHistogram[tier] = (tierHistogram[tier] ?? 0) + 1;
+    if (c.usage?.tokens_in != null) {
+      tokensIn += c.usage.tokens_in;
+      anyTokensReported = true;
+    }
+    if (c.usage?.tokens_out != null) {
+      tokensOut += c.usage.tokens_out;
+      anyTokensReported = true;
+    }
+  }
+  return ok({
+    feature: state.feature,
+    schema: state.schema,
+    events,
+    summary: {
+      completed: completes.length,
+      gates: {
+        total: gates.length,
+        passed: gates.filter((g) => g.passed).length,
+        blocked: gates.filter((g) => !g.passed).length
+      },
+      retries: retries.length,
+      tier_histogram: tierHistogram,
+      // null (not zero) when no worker reported usage — absence is honest, since the
+      // CLI cannot derive these itself.
+      reported_tokens: anyTokensReported ? { tokens_in: tokensIn, tokens_out: tokensOut } : null
+    }
+  });
+}
 function nextHandler(root) {
   if (!runStateExists(root)) return usage('no run state \u2014 run "spin init" first');
   const graph = activeGraph(root);
@@ -22066,7 +22140,18 @@ function completeHandler(root, id, opts) {
     fs14.mkdirSync(path9.dirname(dest), { recursive: true });
     fs14.writeFileSync(dest, JSON.stringify(check.data, null, 2) + "\n");
   }
-  const state = markComplete(root, id);
+  let reportedUsage;
+  if (opts.handoff && fs14.existsSync(opts.handoff)) {
+    try {
+      const raw = JSON.parse(fs14.readFileSync(opts.handoff, "utf-8"));
+      if (raw.usage !== void 0) {
+        const parsed = Usage.safeParse(raw.usage);
+        if (parsed.success) reportedUsage = parsed.data;
+      }
+    } catch {
+    }
+  }
+  const state = markComplete(root, id, reportedUsage);
   return ok({ completed: id, runState: state });
 }
 function validateHandler(root, idOrPath) {
@@ -22277,7 +22362,7 @@ async function runCli(argv, write = (chunk) => process.stdout.write(chunk)) {
   };
   const rootOf = (opts) => opts.root ?? process.cwd();
   const program2 = new Command();
-  program2.name("spin").description("AgentSpec Harness \u2014 deterministic spec-driven orchestration spine").version("0.1.0").option("--root <dir>", "project root containing .spindle/ (default: cwd)").enablePositionalOptions();
+  program2.name("spin").description("Spindle \u2014 deterministic spec-driven orchestration spine").version("0.1.0").option("--root <dir>", "project root containing .spindle/ (default: cwd)").enablePositionalOptions();
   const root = (cmd) => rootOf(cmd.optsWithGlobals());
   program2.command("init").option("--schema <name>", "workflow schema (sdd | kb)", "sdd").option("--feature <slug>", "feature slug", "feature").action(function(opts) {
     emit(initHandler(root(this), opts));
@@ -22290,6 +22375,9 @@ async function runCli(argv, write = (chunk) => process.stdout.write(chunk)) {
   });
   program2.command("order").action(function() {
     emit(orderHandler(root(this)));
+  });
+  program2.command("trace").description("print the recorded run-ledger timeline + a tier/token summary (pure read, exit 0)").action(function() {
+    emit(traceHandler(root(this)));
   });
   program2.command("complete <id>").option("--handoff <file>", "worker-output JSON sidecar to validate").action(function(id, opts) {
     emit(completeHandler(root(this), id, opts));

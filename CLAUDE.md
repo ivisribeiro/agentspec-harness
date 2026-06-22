@@ -119,6 +119,7 @@ between `src/`+`schemas/` and `plugin/`.
 | `spin init --schema <sdd\|kb> --feature <slug>` | scaffold `.spindle/`, copy the editable schema, create `run.json` |
 | `spin next` | `{ ready:[{id,model,parallel_group}], blocked:{}, complete:bool }` |
 | `spin order` | full Kahn build order |
+| `spin trace` | the run-ledger timeline (`events[]`) + a tier/token summary. Pure read, exit 0 — a report, not a gate |
 | `spin state` | the `run.json` ledger (`completed[]`, `retries{}`, `gates{}`) |
 | `spin complete <id> [--handoff f.json]` | validate the handoff against the artifact's schema, THEN mark complete (exit 1 if invalid) |
 | `spin validate <id\|path>` | structural checks (md sections / manifest table / criteria IDs); exit 0/1 |
@@ -263,6 +264,16 @@ on exit codes. That is the entire mechanism.
 A command or worker reads `.spindle/` via `spin state` / `spin next`; only `spin`
 mutates `run.json`. Do not hand-edit the ledger — the determinism guarantee
 depends on it being machine-owned.
+
+`run.json` also carries an append-only `events[]` ledger — the run's *trajectory*
+(`complete` / `gate` / `retry`), distinct from the current-state maps
+(`completed[]` / `retries{}` / `gates{}`). It is written only at the existing CLI
+mutation points and is a pure superset, so crash-safety and idempotency hold (an
+unchanged gate re-run appends nothing). A `complete` event may carry an **opaque,
+model-reported `usage`** annotation (`{tier, model?, tokens_in?, tokens_out?}`) that
+the worker put on its handoff sidecar — the CLI **records** it, never computes or
+prices it (the guard test forbids tokenizers/pricing in `src/`). `spin trace` reads
+this ledger; it is accounting, not enforcement.
 
 ---
 
