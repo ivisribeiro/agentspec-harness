@@ -5,18 +5,36 @@
 # G_REVIEW_BLOCK gate judges. This lives on the MODEL side (a script a command runs); the
 # spin spine in src/ never calls a model, so the harness-purity invariant is preserved.
 #
-# Usage: codex-review.sh [target]
-#   target — a path/dir to review, or "diff" (default) to review the current git diff.
-# Output: codex's raw review on stdout (expected to be a JSON array of findings).
-# Fail-open: if the codex CLI is absent or errors, print a marker and exit 0 — a missing
-# cross-vendor reviewer must never block the run; the Claude-side adversarial gate still runs.
+# CONFIG — resolved in this order (NO secret ever lives in the repo):
+#   1. .spindle/codex.env (gitignored) is sourced first if present — put OPENAI_API_KEY
+#      and any knobs there. See docs/codex-review.md for the template.
+#   2. the process environment.
+#   Knobs:
+#     SPINDLE_CODEX_ENABLED   default 1 — set 0 to turn the cross-vendor step off
+#     SPINDLE_CODEX_MODEL     optional — passed as `codex exec -m <model>`
+#     SPINDLE_CODEX_FLAGS     optional — extra flags for `codex exec`
+#   AUTH: codex authenticates via its own `codex login` session OR the OPENAI_API_KEY
+#   env var (which .spindle/codex.env may set). Spindle stores no credentials itself.
+#
+# Usage: codex-review.sh [target]   (target = a path/dir, or "diff" (default))
+# Output: codex's raw review on stdout (expected: a JSON array of findings), or a CODEX_*
+# marker line. Fail-open: any unmet precondition prints a marker and exits 0 — a missing or
+# unconfigured cross-vendor reviewer must never block the run.
 set -uo pipefail
 
 TARGET="${1:-diff}"
 
+CONFIG=".spindle/codex.env"
+if [ -f "$CONFIG" ]; then set -a; . "$CONFIG"; set +a; fi
+
+if [ "${SPINDLE_CODEX_ENABLED:-1}" = "0" ]; then
+  echo "CODEX_DISABLED: cross-vendor review is off (SPINDLE_CODEX_ENABLED=0)."
+  exit 0
+fi
+
 if ! command -v codex >/dev/null 2>&1; then
-  echo "CODEX_UNAVAILABLE: the codex CLI is not on PATH. Install it and run 'codex login'"
-  echo "to enable Spindle's native cross-vendor review. Skipping (the Claude-side review still runs)."
+  echo "CODEX_UNAVAILABLE: the codex CLI is not on PATH. Install it, then authenticate with"
+  echo "'codex login' (or set OPENAI_API_KEY in .spindle/codex.env). See docs/codex-review.md. Skipping."
   exit 0
 fi
 
@@ -31,7 +49,10 @@ Use "critical" only for a defect that must block the merge. Emit [] if you find 
 No prose, no markdown fences — just the JSON array.
 EOF
 
-# codex exec is the non-interactive one-shot mode. It selects its model + auth via
-# `codex login`; Spindle does not hardcode a model id or an endpoint.
-codex exec "$PROMPT" 2>&1 || echo "CODEX_ERROR: codex exec failed (check 'codex login')."
+# codex exec is the non-interactive one-shot mode; it resolves its own auth (codex login
+# or OPENAI_API_KEY). Spindle hardcodes no endpoint and no credential.
+MODEL_ARG=""
+[ -n "${SPINDLE_CODEX_MODEL:-}" ] && MODEL_ARG="-m ${SPINDLE_CODEX_MODEL}"
+codex exec ${MODEL_ARG} ${SPINDLE_CODEX_FLAGS:-} "$PROMPT" 2>&1 \
+  || echo "CODEX_ERROR: codex exec failed — check that you ran 'codex login' or set OPENAI_API_KEY (see docs/codex-review.md)."
 exit 0

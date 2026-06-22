@@ -9,6 +9,10 @@ code; a different vendor judges it. The spin spine never calls a model — the c
 invocation lives in `scripts/codex-review.sh` (the model side); the gate that decides is
 pure code.
 
+**Setup, auth, and config:** see `docs/codex-review.md` — install the codex CLI, authenticate
+(`codex login` or `OPENAI_API_KEY`), and the optional `.spindle/codex.env` knobs
+(`SPINDLE_CODEX_ENABLED` / `_MODEL` / `_FLAGS`). Spindle stores no credential.
+
 ## When to run
 
 This is an EXTRA, additive step — it changes nothing in the normal flow. Run it ONLY when
