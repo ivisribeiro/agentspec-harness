@@ -38,6 +38,11 @@ export const ConfigBlock = z
   .object({
     build_retry_cap: z.number().int().positive().default(3),
     kb_min_test_cases: z.number().int().nonnegative().default(1),
+    // Optional blocking floor for the DEFINE handoff's clarity (0..1). UNSET by
+    // default — when a schema sets it, G_DEFINE blocks a define handoff whose
+    // clarity is below it (turns the recorded clarity number into a verdict). This
+    // is a NEW policy knob, not a recovered legacy "12/15" threshold.
+    clarity_floor: z.number().min(0).max(1).optional(),
   })
   .partial()
   .optional();

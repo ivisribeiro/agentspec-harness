@@ -58,6 +58,15 @@ export function gDefine(ctx: GateContext): GateResult {
     if (!check.ok) {
       reasons.push(`define handoff invalid: ${check.errors.join('; ')}`);
       unmet.push('handoff:define');
+    } else {
+      // Optional config-driven clarity floor: turn the recorded 0..1 clarity into a
+      // verdict when the schema declares a floor. UNSET => not enforced (additive).
+      const floor = ctx.graph?.getSchema().config?.clarity_floor;
+      const clarity = (check.data as { clarity?: number }).clarity;
+      if (typeof floor === 'number' && typeof clarity === 'number' && clarity < floor) {
+        reasons.push(`clarity ${clarity} is below the configured floor ${floor}`);
+        unmet.push('clarity-floor');
+      }
     }
   }
 
