@@ -8,6 +8,7 @@ import {
   markComplete,
   markApproved,
   markIncomplete,
+  invalidate,
   incRetry,
   getRetry,
   recordGate,
@@ -113,6 +114,19 @@ describe('run-state ledger', () => {
     recordGate(root, 'G_BUILD', { passed: true, reasons: [] }); // changed → new event
     const ev = loadRunState(root).events.filter((e) => e.kind === 'gate');
     expect(ev.map((e) => (e as { passed: boolean }).passed)).toEqual([false, true]);
+  });
+
+  it('invalidate drops the closure from completed and voids all gates + approval', () => {
+    initRunState(root, 'sdd', 'feat');
+    markComplete(root, 'define');
+    markComplete(root, 'design');
+    recordGate(root, 'G_DEFINE', { passed: true, reasons: [] });
+    markApproved(root, 'ivis');
+    invalidate(root, ['design', 'build', 'ship']); // the closure of an edited 'design'
+    const s = loadRunState(root);
+    expect(s.completed).toEqual(['define']); // upstream stays; closure dropped
+    expect(s.gates).toEqual({}); // all verdicts voided — no stale-green
+    expect(s.approval).toBe(null);
   });
 
   it('records human approval + an approve event; re-gate (markIncomplete) clears it', () => {

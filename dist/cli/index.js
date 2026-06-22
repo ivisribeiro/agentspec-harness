@@ -20371,6 +20371,24 @@ var ArtifactGraph = class _ArtifactGraph {
     }
     return ready.sort();
   }
+  /** The downstream closure: the given ids plus every artifact that transitively
+   *  requires one of them. Used by `spin invalidate` so editing an artifact cascades
+   *  re-gating to everything that depends on it. */
+  getDownstream(ids) {
+    const target = new Set(ids);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const a of this.artifacts.values()) {
+        if (target.has(a.id)) continue;
+        if (a.requires.some((r) => target.has(r))) {
+          target.add(a.id);
+          changed = true;
+        }
+      }
+    }
+    return [...target].sort();
+  }
   isComplete(completed) {
     for (const artifact of this.artifacts.values()) {
       if (!completed.has(artifact.id)) return false;
@@ -20571,6 +20589,14 @@ function markComplete(root, id, usage2) {
     state.completed = [...state.completed, id].sort();
     state.events = [...state.events, { kind: "complete", at: nowIso(), id, ...usage2 ? { usage: usage2 } : {} }];
   }
+  return saveRunState(root, state);
+}
+function invalidate(root, ids) {
+  const state = loadRunState(root);
+  const drop = new Set(ids);
+  state.completed = state.completed.filter((c) => !drop.has(c));
+  state.gates = {};
+  state.approval = null;
   return saveRunState(root, state);
 }
 function getRetry(root, id) {
@@ -22742,6 +22768,19 @@ function evalHandler(opts) {
   const fail = report.regressions.length > 0 || coverageIncomplete;
   return fail ? blocked(report) : ok(report);
 }
+function invalidateHandler(root, id) {
+  if (!runStateExists(root)) return usage('no run state \u2014 run "spin init" first');
+  const graph = activeGraph(root);
+  if (!graph.getArtifact(id)) return usage(`unknown artifact "${id}"`);
+  const closure = graph.getDownstream([id]);
+  const state = invalidate(root, closure);
+  return ok({
+    invalidated: closure,
+    completed: state.completed,
+    gates_cleared: true,
+    approval_cleared: true
+  });
+}
 function approveHandler(root, opts) {
   if (!runStateExists(root)) return usage('no run state \u2014 run "spin init" first');
   if (!process.stdin.isTTY) {
@@ -22788,6 +22827,9 @@ async function runCli(argv, write = (chunk) => process.stdout.write(chunk)) {
   });
   program2.command("complete <id>").option("--handoff <file>", "worker-output JSON sidecar to validate").action(function(id, opts) {
     emit(completeHandler(root(this), id, opts));
+  });
+  program2.command("invalidate <id>").description("after editing a gated artifact: drop it + its downstream closure from the ledger and void all gate verdicts + approval, so no stale-green survives (the /iterate cascade)").action(function(id) {
+    emit(invalidateHandler(root(this), id));
   });
   program2.command("approve").description("record human sign-off (required by G_SHIP). Refuses unless run in an interactive terminal \u2014 an agent cannot approve").option("--by <name>", "approver name (defaults to $USER)").action(function(opts) {
     emit(approveHandler(root(this), opts));

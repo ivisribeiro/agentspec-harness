@@ -27,6 +27,7 @@ import {
   specDriftHandler,
   evalHandler,
   approveHandler,
+  invalidateHandler,
   type HandlerResult,
 } from '../commands/handlers.js';
 
@@ -111,6 +112,13 @@ export async function runCli(
     .option('--handoff <file>', 'worker-output JSON sidecar to validate')
     .action(function (this: Command, id, opts) {
       emit(completeHandler(root(this), id, opts));
+    });
+
+  program
+    .command('invalidate <id>')
+    .description('after editing a gated artifact: drop it + its downstream closure from the ledger and void all gate verdicts + approval, so no stale-green survives (the /iterate cascade)')
+    .action(function (this: Command, id) {
+      emit(invalidateHandler(root(this), id));
     });
 
   program
