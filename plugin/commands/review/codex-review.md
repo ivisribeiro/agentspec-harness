@@ -9,6 +9,15 @@ code; a different vendor judges it. The spin spine never calls a model — the c
 invocation lives in `scripts/codex-review.sh` (the model side); the gate that decides is
 pure code.
 
+## When to run
+
+This is an EXTRA, additive step — it changes nothing in the normal flow. Run it ONLY when
+warranted: high-stakes or hard-to-reverse work (the T2 path from `spin tier`) — a
+security-sensitive change, a migration, an architectural decision, or a final pre-ship
+check on a critical feature. Routine, low-risk changes do not need a cross-vendor pass; the
+Claude-side `/review` gate already covers them. Reach for `/codex-review` when a second
+vendor's independent judgment is worth the cost, and skip it otherwise.
+
 ## Steps
 
 ### 1. Run the native cross-vendor reviewer
