@@ -195,7 +195,7 @@ Detecting project health...
 
 # Project Status Report
 
-**Project:** agentspec
+**Project:** spindle
 **Branch:** feat/judge-layer
 **Date:** 2026-04-14
 

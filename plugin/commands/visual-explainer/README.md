@@ -22,7 +22,7 @@
 /generate-web-diagram "Data pipeline architecture"
 
 # Create a slide deck
-/generate-slides "AgentSpec overview for stakeholders"
+/generate-slides "Spindle overview for stakeholders"
 
 # Review a diff visually
 /diff-review main

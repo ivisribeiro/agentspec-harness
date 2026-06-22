@@ -1,7 +1,7 @@
 {
   "name": "spindle",
   "metadata": {
-    "description": "AgentSpec made harness-native — deterministic, gate-backed spec-driven orchestration with the spin CLI. 65 agents, 24 KB domains, 33 commands, 9 gates, model routing."
+    "description": "Deterministic, gate-backed spec-driven orchestration with the spin CLI — the spine never calls a model. 65 agents, 24 KB domains, 33 commands, 9 gates, model routing."
   },
   "owner": {
     "name": "Ivis Ribeiro",

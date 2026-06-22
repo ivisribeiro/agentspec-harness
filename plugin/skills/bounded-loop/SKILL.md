@@ -1,6 +1,7 @@
 ---
 name: bounded-loop
 description: Bound a build/retry loop with a deterministic counter that lives in the CLI ledger, not in prose. Use whenever a worker handoff fails `spin complete` and you need to re-dispatch, or whenever you would otherwise write "retry up to N times" / "max 3 attempts" into a command. The ceiling is `config.build_retry_cap` enforced by `spin retry <id>`; the loop body lives in the slash command and fans out workers via Task. Corrects the fake-dispatch anti-pattern (no `claude -p`, no inference endpoints).
+origin: ecc
 ---
 
 # Bounded loop
@@ -23,11 +24,11 @@ Exit-code ABI: `0` = pass · `1` = gate blocked / handoff invalid / ceiling hit 
 Invoke the CLI as `node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js <args>`
 (shorthand below: `spin <args>`).
 
-## Anti-pattern this corrects: ECC fake-dispatch
+## Anti-pattern this corrects: fake-dispatch
 
-The ECC `autonomous-agent-harness` pattern told the command to "dispatch the
-build agent" by shelling out to an inference endpoint (`claude -p ...`) and to
-"retry up to 3 times" in prose. Both are wrong here:
+The fake-dispatch pattern — common in prose-driven "harnesses" — tells the command
+to "dispatch the build agent" by shelling out to an inference endpoint
+(`claude -p ...`) and to "retry up to 3 times" in prose. Both are wrong here:
 
 | Fake-dispatch (do NOT do) | This harness (do) |
 |---|---|
