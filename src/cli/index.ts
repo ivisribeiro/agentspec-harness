@@ -9,6 +9,7 @@ import {
   completeHandler,
   traceHandler,
   budgetHandler,
+  fanoutCheckHandler,
   validateHandler,
   gateHandler,
   diffCriteriaHandler,
@@ -93,6 +94,13 @@ export async function runCli(
     .option('--max-tokens <n>', 'advisory ceiling; sets over_budget when reported spend exceeds it')
     .action(function (this: Command, opts) {
       emit(budgetHandler(root(this), opts));
+    });
+
+  program
+    .command('fanout-check')
+    .description('assert no parallel_group is partially complete (a dropped fan-out worker); exit 0 all-consistent / 1 partial')
+    .action(function (this: Command) {
+      emit(fanoutCheckHandler(root(this)));
     });
 
   program

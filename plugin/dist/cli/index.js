@@ -22319,6 +22319,41 @@ function budgetHandler(root, opts) {
     warning: overBudget ? `reported spend ${total} tokens exceeds the declared budget of ${max} \u2014 advisory only, not enforced` : null
   });
 }
+function fanoutCheckHandler(root) {
+  if (!runStateExists(root)) return usage('no run state \u2014 run "spin init" first');
+  const graph = activeGraph(root);
+  const completed = completedSet(root);
+  const groups = /* @__PURE__ */ new Map();
+  for (const a of graph.getAllArtifacts()) {
+    if (a.parallel_group) {
+      const members = groups.get(a.parallel_group) ?? [];
+      members.push(a.id);
+      groups.set(a.parallel_group, members);
+    }
+  }
+  const reasons = [];
+  const unmet = [];
+  const checked = [];
+  for (const [group, members] of groups) {
+    const done = members.filter((m) => completed.has(m));
+    checked.push({ group, members: members.length, complete: done.length });
+    if (done.length > 0 && done.length < members.length) {
+      const missing = members.filter((m) => !completed.has(m));
+      reasons.push(
+        `parallel group "${group}" is partially complete (${done.length}/${members.length}) \u2014 dropped worker(s): ${missing.join(", ")}`
+      );
+      for (const m of missing) unmet.push(`incomplete-group:${group}:${m}`);
+    }
+  }
+  const result = {
+    feature: loadRunState(root).feature,
+    groups: checked,
+    passed: unmet.length === 0,
+    reasons,
+    unmet
+  };
+  return unmet.length === 0 ? ok(result) : blocked(result);
+}
 function nextHandler(root) {
   if (!runStateExists(root)) return usage('no run state \u2014 run "spin init" first');
   const graph = activeGraph(root);
@@ -22614,6 +22649,9 @@ async function runCli(argv, write = (chunk) => process.stdout.write(chunk)) {
   });
   program2.command("budget").description("reconcile reported token spend per tier against an optional ceiling (advisory; always exit 0)").option("--max-tokens <n>", "advisory ceiling; sets over_budget when reported spend exceeds it").action(function(opts) {
     emit(budgetHandler(root(this), opts));
+  });
+  program2.command("fanout-check").description("assert no parallel_group is partially complete (a dropped fan-out worker); exit 0 all-consistent / 1 partial").action(function() {
+    emit(fanoutCheckHandler(root(this)));
   });
   program2.command("complete <id>").option("--handoff <file>", "worker-output JSON sidecar to validate").action(function(id, opts) {
     emit(completeHandler(root(this), id, opts));
