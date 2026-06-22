@@ -119,6 +119,7 @@ interface BuildResults {
     correction?: string;
     reconciled?: boolean;
     verified_by?: string;
+    verified_by_result?: 'passed' | 'failed';
   }>;
 }
 
@@ -201,6 +202,23 @@ export function gBuild(ctx: GateContext): GateResult {
         reasons.push(`acceptance criterion ${r.criterion} cites a verifier that does not exist: ${r.verified_by}`);
         unmet.push(`evidence-missing:${r.criterion}`);
       }
+    }
+  }
+
+  // Tests at build. The spine READS the CI-produced verifier result; it never runs a
+  // verifier (execution lives in CI, the result flows in as data). Two checks:
+  const requireVerifier = ctx.graph?.getSchema().config?.require_verified_by === true;
+  for (const r of buildRes?.results ?? []) {
+    if (r.status !== 'passed') continue;
+    // (a) a passed criterion may not claim a verifier CI reported as failed.
+    if (r.verified_by_result === 'failed') {
+      reasons.push(`acceptance criterion ${r.criterion} is marked passed but its verifier reported failed`);
+      unmet.push(`verifier-failed:${r.criterion}`);
+    }
+    // (b) when the schema requires it, every passed criterion must cite a verifier (a test).
+    if (requireVerifier && !r.verified_by) {
+      reasons.push(`acceptance criterion ${r.criterion} is passed but cites no verifier (config.require_verified_by)`);
+      unmet.push(`missing-verifier:${r.criterion}`);
     }
   }
 

@@ -143,7 +143,9 @@ between `src/`+`schemas/` and `plugin/`.
 **Gate ids** (`spin gate <id>`):
 `G_DEFINE` (before /design), `G_DESIGN` (before /build), `G_BUILD` (before
 /ship — every manifest file exists on disk + criteria-diff empty + BUILD_REPORT
-exists), `G_SHIP` (define.criteria minus build.passed is empty AND a human approval is
+exists + no passed criterion's CI `verified_by_result` is `failed` + (when
+`config.require_verified_by`) every passed criterion cites a verifier; the spine
+READS the CI result, never runs the verifier), `G_SHIP` (define.criteria minus build.passed is empty AND a human approval is
 recorded via `spin approve` — the seam applied to sign-off: a model cannot approve), `G_KB_STRUCTURE`,
 `G_KB_COVERAGE` (every manifest concept authored + enough test cases; manifest shape
 is Zod-validated; E-1: a `needs_decoding` concept must carry a non-empty
