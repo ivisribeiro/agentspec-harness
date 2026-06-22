@@ -1,0 +1,7 @@
+{
+  "id": "G_PLAN-block",
+  "gate": "G_PLAN",
+  "expect": "block",
+  "args": { "audit": "audit.json" },
+  "note": "a task whose detail is vague prose — no file path or command to check against"
+}

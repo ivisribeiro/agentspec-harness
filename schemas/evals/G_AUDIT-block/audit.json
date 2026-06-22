@@ -1,0 +1,13 @@
+{
+  "domain": "auth",
+  "built": [
+    {
+      "item": "row-level security",
+      "evidence": { "files": [], "proof": "" },
+      "status": "scaffolded"
+    }
+  ],
+  "gaps": [
+    { "capability": "rate limiting", "why": "login endpoint is unbounded", "priority": "blocking" }
+  ]
+}

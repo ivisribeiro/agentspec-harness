@@ -1,0 +1,12 @@
+{
+  "findings": [
+    {
+      "file": "src/api/handler.ts",
+      "line": 12,
+      "severity": "high",
+      "rule": "no-explicit-any",
+      "message": "avoid any on the request body",
+      "source": "arch-worker"
+    }
+  ]
+}

@@ -27,6 +27,8 @@ jobs:
           npm run guard:authorship
       - name: Test
         run: npm test
+      - name: Eval corpus (gate-regression replay over the bundled dist)
+        run: npm run eval
       - name: Coverage gate (80% on src/core)
         run: npm run test:coverage
 

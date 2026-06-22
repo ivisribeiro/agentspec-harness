@@ -1,0 +1,12 @@
+{
+  "findings": [
+    {
+      "file": "src/auth/login.ts",
+      "line": 42,
+      "severity": "critical",
+      "rule": "sql-injection",
+      "message": "user input concatenated into the SQL string",
+      "source": "security-worker"
+    }
+  ]
+}

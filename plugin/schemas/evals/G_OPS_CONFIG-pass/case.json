@@ -1,0 +1,7 @@
+{
+  "id": "G_OPS_CONFIG-pass",
+  "gate": "G_OPS_CONFIG",
+  "expect": "pass",
+  "args": { "audit": "audit.json" },
+  "note": "every ops-readiness control's prod override is enforced"
+}

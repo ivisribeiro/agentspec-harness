@@ -1,0 +1,13 @@
+{
+  "domain": "auth",
+  "built": [
+    {
+      "item": "row-level security",
+      "evidence": { "files": ["db/policies.sql"], "proof": "ENABLE ROW LEVEL SECURITY on all tenant tables" },
+      "status": "proven"
+    }
+  ],
+  "gaps": [
+    { "capability": "rate limiting", "why": "login endpoint is unbounded", "priority": "blocking" }
+  ]
+}

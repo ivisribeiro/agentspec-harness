@@ -1,0 +1,7 @@
+{
+  "id": "G_ROUTER_COVERAGE-pass",
+  "gate": "G_ROUTER_COVERAGE",
+  "expect": "pass",
+  "args": { "agents": "agents", "routing": "routing.json" },
+  "note": "the roster and the routing table are a clean bijection"
+}
