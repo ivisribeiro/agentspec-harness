@@ -216,7 +216,7 @@ ambiguity (DESIGN fully pre-decided everything).
 
 ## Next Step
 
-**If Complete:** `/ship .claude/sdd/features/DEFINE_{FEATURE_NAME}.md`
+**If Complete:** `/ship .spindle/features/{FEATURE_NAME}/DEFINE.md`
 
 **If Blocked:** Resolve blockers, then `/build` to resume
 

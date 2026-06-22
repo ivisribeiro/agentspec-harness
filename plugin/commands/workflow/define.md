@@ -43,12 +43,12 @@ The **define-worker** must:
 3. Write `.spindle/features/<feature>/.handoffs/define.json` matching the **define** handoff schema:
    ```json
    {
-     "handoff": "define",
      "feature": "<slug>",
-     "clarity": "<high|medium|low>",
+     "clarity": 0.92,
      "criteria": ["AC-1", "AC-2", "..."]
    }
    ```
+   `clarity` is a **0..1 confidence score** (e.g. `0.92` = high confidence, `0.5` = uncertain) — not a string enum.
 
 ---
 

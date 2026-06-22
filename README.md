@@ -51,11 +51,15 @@ See [`docs/MEASUREMENT.md`](docs/MEASUREMENT.md) for the doctrine and its honest
 
 ## Install
 
-### Option A — Claude Code plugin (local, works today)
+### Option A — Claude Code plugin (persistent install)
+
+Register the bundled marketplace and install from it — this survives session restarts:
 
 ```bash
 git clone https://github.com/ivisribeiro/spindle.git
-claude --plugin-dir ./spindle/plugin
+cd spindle
+claude plugins marketplace add ./.claude-plugin   # register local marketplace once
+claude plugins install spindle                    # install persistently (user scope)
 ```
 
 `plugin/` ships the prebuilt, self-contained `dist/cli/index.js` (deps inlined,
@@ -67,6 +71,9 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js <args>
 ```
 
 The documented shorthand throughout this README is `spin <args>`.
+
+> **Session-only alternative** (`--plugin-dir`): `claude --plugin-dir ./spindle/plugin`
+> loads the plugin for that session only and does not persist across restarts.
 
 ### Option B — build from source / use the CLI directly
 
@@ -96,7 +103,7 @@ Copy `dist/` into your project and invoke `node dist/cli/index.js` directly. Pin
 | `spin explain <gateId>` | What a gate reads, what blocks it, which flags apply — no source-diving | 0 / 2 |
 | `spin complete <id> [--handoff f.json]` | Validate the worker handoff against the artifact's schema, then mark complete. **exit 1 if invalid** | 0 / 1 |
 | `spin validate <id\|path>` | Structural checks (MD sections / manifest table / criteria IDs) | 0 / 1 |
-| `spin gate <gateId> [--agents d] [--routing f] [--findings f]` | Run a named gate. exit 0 = pass, exit 1 = BLOCK with `{gate,passed,reasons,unmet}` | 0 / 1 |
+| `spin gate <gateId> [--agents d] [--routing f] [--kb d] [--findings f]` | Run a named gate. exit 0 = pass, exit 1 = BLOCK with `{gate,passed,reasons,unmet}` | 0 / 1 |
 | `spin diff-criteria --define f --build f` | Set-diff DEFINE criteria vs BUILD passed → `unmet[]` | 0 / 1 |
 | `spin handoff-check <schemaId> <file.json>` | Standalone handoff validation | 0 / 1 |
 | `spin retry <id> --inc \| --ok` | Retry counter vs `config.build_retry_cap`. `--ok` exits 1 at ceiling | 0 / 1 |
@@ -126,7 +133,7 @@ Gates are run via `spin gate <id>`. A command that receives exit 1 surfaces `{ga
 
 | Gate ID | Fires before | Checks |
 |---|---|---|
-| `G_DEFINE` | `/design` | DEFINE sections present, AC-n IDs valid, define handoff valid |
+| `G_DEFINE` | `/design` | DEFINE sections present (`Why`/`What`/`Acceptance Criteria`), define handoff valid, optional clarity floor met |
 | `G_DESIGN` | `/build` | Manifest table present, design handoff valid |
 | `G_BUILD` | `/ship` | Every manifest file exists on disk; every DEFINE criterion `passed`; **no phantom criterion** (a `passed` AC-n DEFINE never declared → set-drift); a cited `verified_by` file must exist; **a passed criterion whose CI verifier reported `failed` blocks** (the spine reads the CI result, never runs the verifier); when `config.require_verified_by`, every passed criterion must cite a verifier; BUILD_REPORT present |
 | `G_SHIP` | publish | DEFINE criteria minus build.passed must be empty; no phantom criterion; surfaces `spec-drift`; **a human approval must be recorded via `spin approve`** — the seam applied to sign-off: a model cannot approve |
@@ -436,9 +443,13 @@ repair. Full write-up: [`docs/DOGFOOD_LOG_pix-brcode.md`](docs/DOGFOOD_LOG_pix-b
 
 ## Attribution
 
-- **[AgentSpec](https://github.com/agentspec)** — the SDD workflow doctrine (Brainstorm → Define → Design → Build → Ship), gate philosophy, and handoff contract model that this harness implements.
-- **[OpenSpec](https://openspec.dev)** — the open specification format underlying the schema and handoff JSON schemas.
-- **[ECC](https://github.com/ECC)** — the Claude Code plugin conventions, skill/agent authoring patterns, and harness tooling that the command layer follows.
+The typed gates (`G_DEFINE` / `G_DESIGN` / `G_BUILD` / `G_SHIP` / …), the exit-code ABI (`0` pass / `1` block / `2` usage / `3` crash), the handoff sidecar contracts, the model-routing policy, and the hard seam (`spin` never calls a model) are Spindle originals — see [CREDITS.md](./CREDITS.md) for the full provenance record.
+
+What was genuinely adapted from upstream projects:
+
+- **[AgentSpec](https://github.com/agentspec)** — the 5-phase SDD workflow shape (Brainstorm → Define → Design → Build → Ship), the specialist agent roster, and the knowledge-base domains. Routed and gated by Spindle's harness; adapted files carry an `origin:` stamp.
+- **[OpenSpec](https://openspec.dev)** — the artifact-graph spine: Kahn topological ordering, schema validation, cycle detection, and CLI build mechanics. Re-implemented in TypeScript in `src/core/artifact-graph/`.
+- **[ECC](https://github.com/ECC)** — the original harness-pattern doctrine (adversarial gate, bounded loop, parallel fan-out, model routing) that inspired the four Spindle skills of the same names. Those skills have since been re-authored against concrete `src/` mechanisms with no ECC counterpart.
 
 ---
 
