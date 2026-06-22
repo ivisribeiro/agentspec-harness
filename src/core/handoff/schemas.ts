@@ -32,6 +32,10 @@ export const DesignHandoff = z.object({
     )
     .min(1, 'manifest must list at least one file'),
   decisions: z.array(z.string()).default([]),
+  // The stack the design chose — kebab-case slugs (e.g. ["dbt","fastapi","iceberg"]).
+  // Drives KB generation: each is a domain /create-specialist can author + bind, so the
+  // build phase is grounded in the *project's* stack rather than a pre-loaded catalog.
+  technologies: z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)).default([]),
 });
 
 export const BuildTaskHandoff = z.object({

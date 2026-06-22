@@ -20693,7 +20693,11 @@ var DesignHandoff = external_exports.object({
       purpose: external_exports.string().min(1)
     })
   ).min(1, "manifest must list at least one file"),
-  decisions: external_exports.array(external_exports.string()).default([])
+  decisions: external_exports.array(external_exports.string()).default([]),
+  // The stack the design chose — kebab-case slugs (e.g. ["dbt","fastapi","iceberg"]).
+  // Drives KB generation: each is a domain /create-specialist can author + bind, so the
+  // build phase is grounded in the *project's* stack rather than a pre-loaded catalog.
+  technologies: external_exports.array(external_exports.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)).default([])
 });
 var BuildTaskHandoff = external_exports.object({
   file: external_exports.string().min(1),
@@ -22377,6 +22381,36 @@ function fanoutCheckHandler(root) {
   };
   return unmet.length === 0 ? ok(result) : blocked(result);
 }
+function kbInstallHandler(root, domain, opts) {
+  if (!domain || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(domain)) {
+    return usage("kb-install requires a kebab-case <domain>");
+  }
+  const src = opts.from ? path10.resolve(root, opts.from) : featureDir(root, domain);
+  if (!fs15.existsSync(src)) {
+    return usage(`KB source not found: ${src} \u2014 run /create-kb ${domain} first`);
+  }
+  const required = ["index.md", "quick-reference.md", "manifest.json"];
+  const missing = required.filter((f) => !fs15.existsSync(path10.join(src, f)));
+  const concepts = fs15.readdirSync(src).filter((f) => f.startsWith("concept-") && f.endsWith(".md"));
+  if (missing.length > 0 || concepts.length === 0) {
+    return blocked({
+      installed: false,
+      domain,
+      missing,
+      concepts: concepts.length,
+      reason: "source is not a complete flat KB domain \u2014 pass G_KB_STRUCTURE + G_KB_COVERAGE first"
+    });
+  }
+  const destRoot = opts.dest ? path10.resolve(root, opts.dest) : path10.join(root, "plugin", "kb");
+  const dest = path10.join(destRoot, domain);
+  fs15.mkdirSync(dest, { recursive: true });
+  const copied = [];
+  for (const f of [...required, ...concepts]) {
+    fs15.copyFileSync(path10.join(src, f), path10.join(dest, f));
+    copied.push(f);
+  }
+  return ok({ installed: true, domain, dest, copied });
+}
 function nextHandler(root) {
   if (!runStateExists(root)) return usage('no run state \u2014 run "spin init" first');
   const graph = activeGraph(root);
@@ -22723,6 +22757,9 @@ async function runCli(argv, write = (chunk) => process.stdout.write(chunk)) {
   });
   program2.command("kinds").description("list known routing task-kinds").action(function() {
     emit(listTaskKindsHandler());
+  });
+  program2.command("kb-install <domain>").description("publish a generated KB domain (flat layout) from .spindle/ into plugin/kb/ so kb_domains resolves; pure file copy, exit 1 if the source is incomplete").option("--from <dir>", "source dir (default .spindle/features/<domain>)").option("--dest <dir>", "destination kb root (default plugin/kb)").action(function(domain, opts) {
+    emit(kbInstallHandler(root(this), domain, opts));
   });
   program2.command("schema <action> [handoffId]").description("show | validate the active workflow schema; `show <handoff-id>` describes a handoff JSON shape").action(function(action, handoffId) {
     emit(schemaHandler(root(this), action, handoffId));

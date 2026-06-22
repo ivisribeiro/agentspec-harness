@@ -246,6 +246,44 @@ export function fanoutCheckHandler(root: string): HandlerResult {
   return unmet.length === 0 ? ok(result) : blocked(result);
 }
 
+export function kbInstallHandler(
+  root: string,
+  domain: string,
+  opts: { from?: string; dest?: string }
+): HandlerResult {
+  if (!domain || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(domain)) {
+    return usage('kb-install requires a kebab-case <domain>');
+  }
+  // Source = the workspace where /create-kb authored the domain (default .spindle/features/<domain>).
+  const src = opts.from ? path.resolve(root, opts.from) : featureDir(root, domain);
+  if (!fs.existsSync(src)) {
+    return usage(`KB source not found: ${src} — run /create-kb ${domain} first`);
+  }
+  // Only a complete, gate-passing flat KB domain may be published. This is a pure file
+  // copy (no model); it lands the generated domain where G_ROUTER_COVERAGE --kb resolves it.
+  const required = ['index.md', 'quick-reference.md', 'manifest.json'];
+  const missing = required.filter((f) => !fs.existsSync(path.join(src, f)));
+  const concepts = fs.readdirSync(src).filter((f) => f.startsWith('concept-') && f.endsWith('.md'));
+  if (missing.length > 0 || concepts.length === 0) {
+    return blocked({
+      installed: false,
+      domain,
+      missing,
+      concepts: concepts.length,
+      reason: 'source is not a complete flat KB domain — pass G_KB_STRUCTURE + G_KB_COVERAGE first',
+    });
+  }
+  const destRoot = opts.dest ? path.resolve(root, opts.dest) : path.join(root, 'plugin', 'kb');
+  const dest = path.join(destRoot, domain);
+  fs.mkdirSync(dest, { recursive: true });
+  const copied: string[] = [];
+  for (const f of [...required, ...concepts]) {
+    fs.copyFileSync(path.join(src, f), path.join(dest, f));
+    copied.push(f);
+  }
+  return ok({ installed: true, domain, dest, copied });
+}
+
 export function nextHandler(root: string): HandlerResult {
   if (!runStateExists(root)) return usage('no run state — run "spin init" first');
   const graph = activeGraph(root);
