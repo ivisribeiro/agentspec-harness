@@ -130,6 +130,8 @@ between `src/`+`schemas/` and `plugin/`.
 | `spin gate <gateId> [--agents d] [--routing f] [--kb d] [--findings f]` | run a named gate; exit 0 pass / 1 BLOCK with `{gate,passed,reasons,unmet}`. `--kb` (default `plugin/kb`) backs G_ROUTER_COVERAGE's kb_domains referential check |
 | `spin diff-criteria --define f --build f` | set-diff DEFINE criteria vs BUILD passed -> `unmet[]` |
 | `spin handoff-check <schemaId> <file.json>` | standalone handoff validation |
+| `spin merge-findings <files...> [--out f]` | deterministically merge N finding files (dedup file+line+rule, keep higher severity, aggregate sources) into one `{findings,sources}` for `G_REVIEW_BLOCK` |
+| `spin kb-install <domain> [--from d] [--dest d]` | publish a complete flat KB domain from `.spindle/` into `plugin/kb/` (pure copy) so `kb_domains` resolves; exit 1 if the source is incomplete |
 | `spin retry <id> --inc \| --ok` | retry counter vs `config.build_retry_cap`; `--ok` exits 1 at ceiling |
 | `spin route <taskKind> [--budget std\|low]` | `{ tier, model, reason }` |
 | `spin schema show \| validate` | inspect / validate the active editable schema |

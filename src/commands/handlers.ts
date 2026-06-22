@@ -246,6 +246,52 @@ export function fanoutCheckHandler(root: string): HandlerResult {
   return unmet.length === 0 ? ok(result) : blocked(result);
 }
 
+interface RawFinding {
+  file: string;
+  line?: number | null;
+  severity: string;
+  rule: string;
+  message: string;
+  source: string;
+}
+
+export function mergeFindingsHandler(root: string, files: string[], opts: { out?: string }): HandlerResult {
+  if (!files || files.length === 0) return usage('merge-findings requires one or more finding JSON files');
+  const all: RawFinding[] = [];
+  for (const f of files) {
+    const p = path.isAbsolute(f) ? f : path.join(root, f);
+    if (!fs.existsSync(p)) return usage(`finding file not found: ${p}`);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(fs.readFileSync(p, 'utf-8'));
+    } catch {
+      return usage(`finding file is not valid JSON: ${p}`);
+    }
+    const arr = Array.isArray(parsed) ? parsed : (parsed as { findings?: unknown }).findings;
+    if (!Array.isArray(arr)) return usage(`expected a findings array (or {findings:[...]}) in ${p}`);
+    for (const item of arr) all.push(item as RawFinding);
+  }
+  // Deterministic merge: dedup by (file, line, rule), keep the higher severity on a
+  // collision, and aggregate the distinct contributing sources. Replaces the prose merge
+  // so a CRITICAL cannot be dropped (and a source forged) by hand before the gate sees it.
+  const rank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+  const byKey = new Map<string, RawFinding>();
+  for (const f of all) {
+    const key = `${f.file}::${f.line ?? ''}::${f.rule}`;
+    const existing = byKey.get(key);
+    if (!existing || (rank[f.severity] ?? 0) > (rank[existing.severity] ?? 0)) byKey.set(key, f);
+  }
+  const findings = [...byKey.values()];
+  const sources = [...new Set(all.map((f) => f.source).filter(Boolean))].sort();
+  const out = { findings, sources };
+  if (opts.out) {
+    const p = path.isAbsolute(opts.out) ? opts.out : path.join(root, opts.out);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify(out, null, 2) + '\n');
+  }
+  return ok({ out: opts.out ?? null, findings, sources, count: findings.length });
+}
+
 export function kbInstallHandler(
   root: string,
   domain: string,

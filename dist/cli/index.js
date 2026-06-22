@@ -21381,6 +21381,18 @@ function gReviewBlock(ctx) {
     ]);
   }
   const data = check.data;
+  const minSources = Number(ctx.args["min-sources"] ?? "1");
+  if (Number.isFinite(minSources) && minSources > 1) {
+    const summary = parsed.sources;
+    const distinct = Array.isArray(summary) ? [...new Set(summary)] : [...new Set(data.findings.map((f) => f.source))];
+    if (distinct.length < minSources) {
+      return block(
+        gate,
+        [`requires >=${minSources} distinct review sources; got ${distinct.length} (${distinct.join(", ") || "none"})`],
+        ["insufficient-sources"]
+      );
+    }
+  }
   const critical = data.findings.filter((f) => f.severity === "critical");
   if (critical.length > 0) {
     return block(
@@ -22381,6 +22393,39 @@ function fanoutCheckHandler(root) {
   };
   return unmet.length === 0 ? ok(result) : blocked(result);
 }
+function mergeFindingsHandler(root, files, opts) {
+  if (!files || files.length === 0) return usage("merge-findings requires one or more finding JSON files");
+  const all = [];
+  for (const f of files) {
+    const p = path10.isAbsolute(f) ? f : path10.join(root, f);
+    if (!fs15.existsSync(p)) return usage(`finding file not found: ${p}`);
+    let parsed;
+    try {
+      parsed = JSON.parse(fs15.readFileSync(p, "utf-8"));
+    } catch {
+      return usage(`finding file is not valid JSON: ${p}`);
+    }
+    const arr = Array.isArray(parsed) ? parsed : parsed.findings;
+    if (!Array.isArray(arr)) return usage(`expected a findings array (or {findings:[...]}) in ${p}`);
+    for (const item of arr) all.push(item);
+  }
+  const rank = { critical: 4, high: 3, medium: 2, low: 1 };
+  const byKey = /* @__PURE__ */ new Map();
+  for (const f of all) {
+    const key = `${f.file}::${f.line ?? ""}::${f.rule}`;
+    const existing = byKey.get(key);
+    if (!existing || (rank[f.severity] ?? 0) > (rank[existing.severity] ?? 0)) byKey.set(key, f);
+  }
+  const findings = [...byKey.values()];
+  const sources = [...new Set(all.map((f) => f.source).filter(Boolean))].sort();
+  const out = { findings, sources };
+  if (opts.out) {
+    const p = path10.isAbsolute(opts.out) ? opts.out : path10.join(root, opts.out);
+    fs15.mkdirSync(path10.dirname(p), { recursive: true });
+    fs15.writeFileSync(p, JSON.stringify(out, null, 2) + "\n");
+  }
+  return ok({ out: opts.out ?? null, findings, sources, count: findings.length });
+}
 function kbInstallHandler(root, domain, opts) {
   if (!domain || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(domain)) {
     return usage("kb-install requires a kebab-case <domain>");
@@ -22730,15 +22775,19 @@ async function runCli(argv, write = (chunk) => process.stdout.write(chunk)) {
   program2.command("validate <idOrPath>").action(function(idOrPath) {
     emit(validateHandler(root(this), idOrPath));
   });
-  program2.command("gate <gateId>").option("--agents <dir>", "agents dir (G_ROUTER_COVERAGE)").option("--routing <file>", "routing.json (G_ROUTER_COVERAGE)").option("--kb <dir>", "kb dir for kb_domains referential check (G_ROUTER_COVERAGE; default plugin/kb)").option("--findings <file>", "findings.json (G_REVIEW_BLOCK)").option("--handoff <file>", "audit.json sidecar (G_AUDIT)").option("--audit <file>", "audit.json sidecar (G_OPS_CONFIG, G_PLAN)").action(function(gateId, opts) {
+  program2.command("gate <gateId>").option("--agents <dir>", "agents dir (G_ROUTER_COVERAGE)").option("--routing <file>", "routing.json (G_ROUTER_COVERAGE)").option("--kb <dir>", "kb dir for kb_domains referential check (G_ROUTER_COVERAGE; default plugin/kb)").option("--findings <file>", "findings.json (G_REVIEW_BLOCK)").option("--min-sources <n>", "G_REVIEW_BLOCK: require >=n distinct review sources").option("--handoff <file>", "audit.json sidecar (G_AUDIT)").option("--audit <file>", "audit.json sidecar (G_OPS_CONFIG, G_PLAN)").action(function(gateId, opts) {
     const args = {};
     if (opts.agents) args.agents = opts.agents;
     if (opts.routing) args.routing = opts.routing;
     if (opts.kb) args.kb = opts.kb;
     if (opts.findings) args.findings = opts.findings;
+    if (opts.minSources) args["min-sources"] = opts.minSources;
     if (opts.handoff) args.handoff = opts.handoff;
     if (opts.audit) args.audit = opts.audit;
     emit(gateHandler(root(this), gateId, args));
+  });
+  program2.command("merge-findings <files...>").description("deterministically merge N finding files (dedup by file+line+rule, keep higher severity, aggregate sources) into one {findings,sources} for G_REVIEW_BLOCK").option("--out <file>", "write the merged result here (else stdout)").action(function(files, opts) {
+    emit(mergeFindingsHandler(root(this), files, opts));
   });
   program2.command("diff-criteria").requiredOption("--define <file>", "define handoff JSON").requiredOption("--build <file>", "build-report handoff JSON").action(function(opts) {
     emit(diffCriteriaHandler(root(this), opts));

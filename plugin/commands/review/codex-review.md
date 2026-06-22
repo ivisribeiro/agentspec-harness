@@ -85,11 +85,17 @@ Spindle's own deterministic gate is the judge of record — never codex's own st
 
 ### 5. (Optional) merge with the Claude-side critics
 
-For the strongest independence, run this alongside `/review` and merge both finding sets so
-`G_REVIEW_BLOCK` sees critics from two vendors. The `source` field (`codex` vs
-`arch-worker`/`security-worker`) keeps each finding attributable. Distinct sources prove
-attribution; running them as separate passes (here, a separate vendor entirely) is what
-gives genuine independence.
+For the strongest independence, run this alongside `/review` and merge both finding sets
+deterministically, then require both vendors:
+
+```
+node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js merge-findings .spindle/review/.handoffs/*.json --out findings.json
+node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js gate G_REVIEW_BLOCK --findings findings.json --min-sources 2
+```
+
+`merge-findings` dedups and aggregates the `sources` summary; `--min-sources 2` makes
+`G_REVIEW_BLOCK` require >=2 distinct sources (e.g. `codex` + `arch-worker`). Distinct
+sources prove attribution; running a separate vendor entirely is what gives the independence.
 
 ### 6. Report
 
