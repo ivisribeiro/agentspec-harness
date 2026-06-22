@@ -10,6 +10,7 @@ import {
   traceHandler,
   budgetHandler,
   fanoutCheckHandler,
+  kbInstallHandler,
   validateHandler,
   gateHandler,
   diffCriteriaHandler,
@@ -191,6 +192,15 @@ export async function runCli(
     .description('list known routing task-kinds')
     .action(function () {
       emit(listTaskKindsHandler());
+    });
+
+  program
+    .command('kb-install <domain>')
+    .description('publish a generated KB domain (flat layout) from .spindle/ into plugin/kb/ so kb_domains resolves; pure file copy, exit 1 if the source is incomplete')
+    .option('--from <dir>', 'source dir (default .spindle/features/<domain>)')
+    .option('--dest <dir>', 'destination kb root (default plugin/kb)')
+    .action(function (this: Command, domain, opts) {
+      emit(kbInstallHandler(root(this), domain, opts));
     });
 
   program
