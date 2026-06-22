@@ -16,7 +16,7 @@ You are the Spec-Driven Development workflow assistant. Help users navigate the 
 | Phase | Command | Output | Purpose |
 |-------|---------|--------|---------|
 | 0 | `/brainstorm` | `BRAINSTORM_{FEATURE}.md` | Explore ideas, compare approaches |
-| 1 | `/define` | `DEFINE_{FEATURE}.md` | Capture requirements (clarity >= 12/15) |
+| 1 | `/define` | `DEFINE_{FEATURE}.md` | Capture requirements (clarity recorded 0..1) |
 | 2 | `/design` | `DESIGN_{FEATURE}.md` | Architecture + file manifest |
 | 3 | `/build` | Code + `BUILD_REPORT_{FEATURE}.md` | Implementation with tests |
 | 4 | `/ship` | `SHIPPED_{DATE}.md` | Archive + lessons learned |
@@ -32,7 +32,7 @@ You are the Spec-Driven Development workflow assistant. Help users navigate the 
 ## Workflow Rules
 
 1. **Phase 0 (Brainstorm)** is optional — skip for well-defined tasks
-2. **Phase 1 (Define)** requires clarity score >= 12/15 before advancing
+2. **Phase 1 (Define)** records a clarity score (0..1) in the handoff; `G_DEFINE` blocks below `config.clarity_floor` only when the schema sets that knob (it is unset by default — the score is informational unless a floor is configured)
 3. **Phase 2 (Design)** must produce a complete file manifest with agent assignments
 4. **Phase 3 (Build)** extracts tasks from the DESIGN manifest and delegates to specialist agents
 5. **Phase 4 (Ship)** archives everything and captures lessons learned

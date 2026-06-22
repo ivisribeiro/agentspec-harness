@@ -267,3 +267,30 @@ describe('G_SHIP', () => {
     expect(r.reasons.some((x) => x.includes('CORRECTED') && x.includes('AC-1'))).toBe(true);
   });
 });
+
+describe('G_DEFINE clarity floor (config-driven)', () => {
+  const FLOOR_YAML = SDD_YAML + '\nconfig:\n  clarity_floor: 0.8\n';
+  function defineReady(clarity: number) {
+    writeArtifact('DEFINE.md', '## Why\nx\n## What\ny\n## Acceptance Criteria\n- AC-1 a\n');
+    writeHandoff('define', { feature: 'feat', clarity, criteria: ['AC-1'] });
+  }
+
+  it('blocks when clarity is below the configured floor', () => {
+    const c: GateContext = { ...ctx, graph: ArtifactGraph.fromYamlContent(FLOOR_YAML) };
+    defineReady(0.5);
+    const r = gDefine(c);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('clarity-floor');
+  });
+
+  it('passes when clarity is at/above the configured floor', () => {
+    const c: GateContext = { ...ctx, graph: ArtifactGraph.fromYamlContent(FLOOR_YAML) };
+    defineReady(0.9);
+    expect(gDefine(c).passed).toBe(true);
+  });
+
+  it('does not enforce clarity when no floor is configured (default)', () => {
+    defineReady(0.1); // far below any sane floor, but the default schema sets none
+    expect(gDefine(ctx).passed).toBe(true);
+  });
+});

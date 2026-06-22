@@ -20194,7 +20194,12 @@ var ArtifactSchema = external_exports.object({
 var GatesMap = external_exports.record(external_exports.string(), external_exports.union([external_exports.string(), external_exports.array(external_exports.string())]));
 var ConfigBlock = external_exports.object({
   build_retry_cap: external_exports.number().int().positive().default(3),
-  kb_min_test_cases: external_exports.number().int().nonnegative().default(1)
+  kb_min_test_cases: external_exports.number().int().nonnegative().default(1),
+  // Optional blocking floor for the DEFINE handoff's clarity (0..1). UNSET by
+  // default — when a schema sets it, G_DEFINE blocks a define handoff whose
+  // clarity is below it (turns the recorded clarity number into a verdict). This
+  // is a NEW policy knob, not a recovered legacy "12/15" threshold.
+  clarity_floor: external_exports.number().min(0).max(1).optional()
 }).partial().optional();
 var SchemaYamlSchema = external_exports.object({
   name: external_exports.string().min(1, "Schema name is required"),
@@ -20926,6 +20931,13 @@ function gDefine(ctx) {
     if (!check.ok) {
       reasons.push(`define handoff invalid: ${check.errors.join("; ")}`);
       unmet.push("handoff:define");
+    } else {
+      const floor = ctx.graph?.getSchema().config?.clarity_floor;
+      const clarity = check.data.clarity;
+      if (typeof floor === "number" && typeof clarity === "number" && clarity < floor) {
+        reasons.push(`clarity ${clarity} is below the configured floor ${floor}`);
+        unmet.push("clarity-floor");
+      }
     }
   }
   return unmet.length === 0 ? pass(gate, ["define complete"]) : block(gate, reasons, unmet);
