@@ -40,6 +40,18 @@ Use `/iterate` when you discover something that needs to change mid-stream.
 
 **Important:** To change code during Phase 3, update the DESIGN document first. The cascade to code triggers a rebuild via `/build`. This ensures traceability.
 
+**Harness integration (REQUIRED):** editing a gated artifact must not leave a green ledger
+behind it. After writing the change, run:
+
+```
+node ${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js invalidate <artifact-id>
+```
+
+This drops `<artifact-id>` and its entire downstream closure from the ledger, voids ALL
+gate verdicts and the human approval, and forces the cascade to be re-authored and re-gated
+(`spin next` → … → `spin gate` → `spin approve` → `/ship`). An `/iterate` that skips this
+step leaves a stale-green run — the exact hole this command must not open.
+
 ---
 
 ## What This Command Does
@@ -47,7 +59,7 @@ Use `/iterate` when you discover something that needs to change mid-stream.
 1. **Detect Phase** - Identify which phase document is being updated
 2. **Analyze Impact** - Determine downstream effects
 3. **Update Document** - Apply changes with version tracking
-4. **Cascade** - Propagate changes to downstream documents if needed
+4. **Cascade through the ledger** - run `spin invalidate <artifact-id>` so the edited artifact and its downstream closure drop from the run-ledger and every gate verdict + the approval are voided, then re-author and re-gate the cascade from `spin next`
 
 ---
 

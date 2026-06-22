@@ -134,6 +134,19 @@ export function markIncomplete(root: string, ids: string[]): RunState {
   return saveRunState(root, state);
 }
 
+/** Invalidate a set of artifacts after an edit (the /iterate cascade). Drops them from
+ *  completed[], and — conservatively — voids ALL gate verdicts and the human approval, so
+ *  no stale-green verdict survives an edit. Gates re-run cheaply and deterministically; the
+ *  caller passes the downstream closure (graph.getDownstream) so dependents re-gate too. */
+export function invalidate(root: string, ids: string[]): RunState {
+  const state = loadRunState(root);
+  const drop = new Set(ids);
+  state.completed = state.completed.filter((c) => !drop.has(c));
+  state.gates = {};
+  state.approval = null;
+  return saveRunState(root, state);
+}
+
 export function getRetry(root: string, id: string): number {
   const state = loadRunState(root);
   return state.retries[id] ?? 0;

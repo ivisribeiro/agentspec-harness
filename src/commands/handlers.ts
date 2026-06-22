@@ -10,6 +10,7 @@ import {
   markComplete,
   markApproved,
   markIncomplete,
+  invalidate,
   completedSet,
   incRetry,
   getRetry,
@@ -673,6 +674,21 @@ export function evalHandler(opts: { corpus?: string; strict?: boolean }): Handle
   const coverageIncomplete = opts.strict === true && !report.coverage.complete;
   const fail = report.regressions.length > 0 || coverageIncomplete;
   return fail ? blocked(report) : ok(report);
+}
+
+export function invalidateHandler(root: string, id: string): HandlerResult {
+  if (!runStateExists(root)) return usage('no run state — run "spin init" first');
+  const graph = activeGraph(root);
+  if (!graph.getArtifact(id)) return usage(`unknown artifact "${id}"`);
+  // Cascade: the edited artifact + everything that transitively depends on it.
+  const closure = graph.getDownstream([id]);
+  const state = invalidate(root, closure);
+  return ok({
+    invalidated: closure,
+    completed: state.completed,
+    gates_cleared: true,
+    approval_cleared: true,
+  });
 }
 
 export function approveHandler(root: string, opts: { by?: string }): HandlerResult {

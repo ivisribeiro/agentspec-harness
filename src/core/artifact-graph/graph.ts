@@ -97,6 +97,25 @@ export class ArtifactGraph {
     return ready.sort();
   }
 
+  /** The downstream closure: the given ids plus every artifact that transitively
+   *  requires one of them. Used by `spin invalidate` so editing an artifact cascades
+   *  re-gating to everything that depends on it. */
+  getDownstream(ids: string[]): string[] {
+    const target = new Set(ids);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const a of this.artifacts.values()) {
+        if (target.has(a.id)) continue;
+        if (a.requires.some((r) => target.has(r))) {
+          target.add(a.id);
+          changed = true;
+        }
+      }
+    }
+    return [...target].sort();
+  }
+
   isComplete(completed: CompletedSet): boolean {
     for (const artifact of this.artifacts.values()) {
       if (!completed.has(artifact.id)) return false;
