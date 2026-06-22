@@ -177,6 +177,52 @@ describe('G_BUILD (replaces the prose checkbox)', () => {
     expect(r.unmet).toContain('evidence-missing:AC-1');
   });
 
+  it('BLOCKS a passed criterion whose CI verifier reported failed (A2)', () => {
+    buildAllFiles();
+    fs.mkdirSync(path.join(root, 'test'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'test', 'a.test.ts'), '// t');
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed', verified_by: 'test/a.test.ts', verified_by_result: 'failed' },
+        { criterion: 'AC-2', status: 'passed' },
+      ],
+    });
+    const r = gBuild(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('verifier-failed:AC-1');
+  });
+
+  it('requires a verifier on every passed criterion when config.require_verified_by (A2)', () => {
+    buildAllFiles();
+    const strict = {
+      ...ctx,
+      graph: ArtifactGraph.fromYamlContent(SDD_YAML + '\nconfig:\n  require_verified_by: true\n'),
+    };
+    const r = gBuild(strict);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('missing-verifier:AC-2');
+  });
+
+  it('passes with require_verified_by when every passed criterion cites an existing verifier (A2)', () => {
+    buildAllFiles();
+    fs.mkdirSync(path.join(root, 'test'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'test', 'a.test.ts'), '// t');
+    fs.writeFileSync(path.join(root, 'test', 'b.test.ts'), '// t');
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed', verified_by: 'test/a.test.ts', verified_by_result: 'passed' },
+        { criterion: 'AC-2', status: 'passed', verified_by: 'test/b.test.ts', verified_by_result: 'passed' },
+      ],
+    });
+    const strict = {
+      ...ctx,
+      graph: ArtifactGraph.fromYamlContent(SDD_YAML + '\nconfig:\n  require_verified_by: true\n'),
+    };
+    expect(gBuild(strict).passed).toBe(true);
+  });
+
   it('PASSES when a cited verifier file exists', () => {
     buildAllFiles();
     fs.mkdirSync(path.join(root, 'test'), { recursive: true });

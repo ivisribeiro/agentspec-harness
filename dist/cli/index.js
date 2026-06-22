@@ -20199,7 +20199,11 @@ var ConfigBlock = external_exports.object({
   // default — when a schema sets it, G_DEFINE blocks a define handoff whose
   // clarity is below it (turns the recorded clarity number into a verdict). This
   // is a NEW policy knob, not a recovered legacy "12/15" threshold.
-  clarity_floor: external_exports.number().min(0).max(1).optional()
+  clarity_floor: external_exports.number().min(0).max(1).optional(),
+  // Tests at build: when true, G_BUILD requires every PASSED acceptance criterion to cite
+  // a `verified_by` (a test/check). UNSET by default (additive). The spine reads the
+  // CI-produced `verified_by_result`; it never runs the verifier.
+  require_verified_by: external_exports.boolean().optional()
 }).partial().optional();
 var SchemaYamlSchema = external_exports.object({
   name: external_exports.string().min(1, "Schema name is required"),
@@ -20727,7 +20731,11 @@ var BuildReportHandoff = external_exports.object({
       // Optional evidence for a `passed` status: the test file / check that
       // substantiates it. When it looks like a path, G_BUILD requires the file
       // to exist — so "passed" can carry proof, not just a bare assertion.
-      verified_by: external_exports.string().optional()
+      verified_by: external_exports.string().optional(),
+      // CI-produced result of running `verified_by` (passed|failed). The CLI READS this;
+      // it NEVER executes the verifier — the spine stays a pure evaluator, execution lives
+      // in CI. A passed criterion whose result is "failed" is a contradiction G_BUILD blocks.
+      verified_by_result: external_exports.enum(["passed", "failed"]).optional()
     })
   ).default([]),
   files_written: external_exports.array(external_exports.string()).default([]),
@@ -21038,6 +21046,18 @@ function gBuild(ctx) {
         reasons.push(`acceptance criterion ${r.criterion} cites a verifier that does not exist: ${r.verified_by}`);
         unmet.push(`evidence-missing:${r.criterion}`);
       }
+    }
+  }
+  const requireVerifier = ctx.graph?.getSchema().config?.require_verified_by === true;
+  for (const r of buildRes?.results ?? []) {
+    if (r.status !== "passed") continue;
+    if (r.verified_by_result === "failed") {
+      reasons.push(`acceptance criterion ${r.criterion} is marked passed but its verifier reported failed`);
+      unmet.push(`verifier-failed:${r.criterion}`);
+    }
+    if (requireVerifier && !r.verified_by) {
+      reasons.push(`acceptance criterion ${r.criterion} is passed but cites no verifier (config.require_verified_by)`);
+      unmet.push(`missing-verifier:${r.criterion}`);
     }
   }
   return unmet.length === 0 ? pass(gate, ["build verified"]) : block(gate, reasons, unmet);

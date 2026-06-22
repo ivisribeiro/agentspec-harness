@@ -68,6 +68,10 @@ export const BuildReportHandoff = z.object({
         // substantiates it. When it looks like a path, G_BUILD requires the file
         // to exist — so "passed" can carry proof, not just a bare assertion.
         verified_by: z.string().optional(),
+        // CI-produced result of running `verified_by` (passed|failed). The CLI READS this;
+        // it NEVER executes the verifier — the spine stays a pure evaluator, execution lives
+        // in CI. A passed criterion whose result is "failed" is a contradiction G_BUILD blocks.
+        verified_by_result: z.enum(['passed', 'failed']).optional(),
       })
     )
     .default([]),
