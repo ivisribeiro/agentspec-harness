@@ -5,6 +5,7 @@ import { validateSections, hasManifestTable } from '../validation/md-section-val
 import { criteriaDiff } from '../validation/criteria-diff.js';
 import { checkHandoffFile } from '../handoff/handoff-check.js';
 import { specDrift } from '../spec-drift.js';
+import { isContainedPath } from '../util/paths.js';
 
 // The SDD gates. These replace AgentSpec build.md's prose "max 3 retry" and the
 // self-marked checkbox quality gate with deterministic, testable checks.
@@ -161,6 +162,13 @@ export function gBuild(ctx: GateContext): GateResult {
   const design = designHandoff ? safeJson<DesignManifest>(designHandoff) : null;
   if (design?.manifest) {
     for (const entry of design.manifest) {
+      // Containment first: a manifest path must stay inside the project root — a `..`
+      // escape can't be allowed to satisfy (or probe) a file outside the tree.
+      if (!isContainedPath(ctx.root, entry.file)) {
+        reasons.push(`manifest file escapes the project root: ${entry.file}`);
+        unmet.push(`unsafe-path:${entry.file}`);
+        continue;
+      }
       const target = path.join(ctx.root, entry.file);
       if (!fs.existsSync(target)) {
         reasons.push(`manifest file not built: ${entry.file}`);
@@ -201,7 +209,10 @@ export function gBuild(ctx: GateContext): GateResult {
   // the same evidence-before-exit-0 rule G_AUDIT applies to built[] items.
   for (const r of buildRes?.results ?? []) {
     if (r.status === 'passed' && r.verified_by && looksLikePath(r.verified_by)) {
-      if (!fs.existsSync(path.join(ctx.root, r.verified_by))) {
+      if (!isContainedPath(ctx.root, r.verified_by)) {
+        reasons.push(`acceptance criterion ${r.criterion} cites a verifier outside the project root: ${r.verified_by}`);
+        unmet.push(`unsafe-path:${r.criterion}`);
+      } else if (!fs.existsSync(path.join(ctx.root, r.verified_by))) {
         reasons.push(`acceptance criterion ${r.criterion} cites a verifier that does not exist: ${r.verified_by}`);
         unmet.push(`evidence-missing:${r.criterion}`);
       }

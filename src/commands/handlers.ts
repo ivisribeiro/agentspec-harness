@@ -31,8 +31,10 @@ import { classifyTier, type TierSignals, type Risk, type Breadth } from '../core
 import { reconcileAudit } from '../core/reconcile.js';
 import { configDrift } from '../core/config-drift.js';
 import { explainGate } from '../core/gates/gate-docs.js';
-import { listGates } from '../core/gates/registry.js';
+import { listGates, isGateId } from '../core/gates/registry.js';
+import { isHandoffId } from '../core/handoff/schemas.js';
 import { describeHandoff, listHandoffIds } from '../core/handoff/describe.js';
+import { isSafeSlug } from '../core/util/paths.js';
 import { specDrift, type BuildResult } from '../core/spec-drift.js';
 import { runEvalCorpus } from '../core/eval/eval.js';
 
@@ -68,16 +70,15 @@ function activeGraph(root: string): ArtifactGraph {
 }
 
 /** Completion = run-state ledger UNION filesystem detection (crash-safe). */
-function effectiveCompleted(root: string, graph: ArtifactGraph): Set<string> {
-  const state = loadRunState(root);
-  const fromState = completedSet(root);
-  const fromFs = detectCompleted(graph, featureDir(root, state.feature));
-  return new Set<string>([...fromState, ...fromFs]);
-}
 
 export function initHandler(root: string, opts: { schema?: string; feature?: string }): HandlerResult {
   const schemaName = opts.schema ?? 'sdd';
   const feature = opts.feature ?? 'feature';
+  // The feature slug becomes a directory name and a trusted run-state value — reject
+  // anything that isn't a plain kebab-case slug so it can't escape `.spindle/features/`.
+  if (!isSafeSlug(feature)) {
+    return usage(`--feature must be a kebab-case slug [a-z0-9-] (got "${feature}")`);
+  }
   const src = bundledSchemaPath(schemaName);
   if (!fs.existsSync(src)) {
     return usage(`unknown bundled schema "${schemaName}" (expected schemas/${schemaName}/schema.yaml)`);
@@ -271,7 +272,13 @@ export function mergeFindingsHandler(root: string, files: string[], opts: { out?
     }
     const arr = Array.isArray(parsed) ? parsed : (parsed as { findings?: unknown }).findings;
     if (!Array.isArray(arr)) return usage(`expected a findings array (or {findings:[...]}) in ${p}`);
-    for (const item of arr) all.push(item as RawFinding);
+    // Fail closed: validate every input item against the finding schema BEFORE merging, so
+    // an unknown severity, a missing source, or a malformed entry can't skew dedupe /
+    // severity-ranking / source-aggregation. (G_REVIEW_BLOCK re-validates later, but the
+    // merge itself must not transform untrusted review output.)
+    const check = checkHandoffObject('finding', { findings: arr });
+    if (!check.ok) return usage(`invalid findings in ${p}: ${check.errors.join('; ')}`);
+    for (const item of (check.data as { findings: RawFinding[] }).findings) all.push(item);
   }
   // Deterministic merge: dedup by (file, line, rule), keep the higher severity on a
   // collision, and aggregate the distinct contributing sources. Replaces the prose merge
@@ -335,17 +342,35 @@ export function kbInstallHandler(
 export function nextHandler(root: string): HandlerResult {
   if (!runStateExists(root)) return usage('no run state — run "spin init" first');
   const graph = activeGraph(root);
-  const completed = effectiveCompleted(root, graph);
-  const ready = graph.getNextArtifacts(completed).map((id) => {
+  const state = loadRunState(root);
+  // Readiness is computed from the LEDGER (authoritative), NOT from file existence. A
+  // worker that only wrote the .md without `spin complete` (no validated handoff) must
+  // not make downstream artifacts look unlocked. Filesystem detection is surfaced
+  // separately as `detected_on_disk` — a crash-recovery signal, never readiness.
+  const ledger = completedSet(root);
+  const onDisk = detectCompleted(graph, featureDir(root, state.feature));
+  const detectedOnDisk = [...onDisk].filter((id) => !ledger.has(id)).sort();
+
+  const ready: Array<{ id: string; model: string | null; parallel_group: string | null }> = [];
+  const gateBlocked: Record<string, string[]> = {};
+  for (const id of graph.getNextArtifacts(ledger)) {
+    // …and an artifact is only truly ready when the lifecycle gate(s) the schema requires
+    // before it are recorded green — otherwise it is gate_blocked, not ready.
+    const unmetGates = graph.getRequiredGatesBefore(id).filter((g) => state.gates[g]?.passed !== true);
+    if (unmetGates.length > 0) {
+      gateBlocked[id] = unmetGates;
+      continue;
+    }
     const a = graph.getArtifact(id)!;
-    return { id, model: a.model ?? null, parallel_group: a.parallel_group ?? null };
-  });
-  const blockedArtifacts = graph.getBlocked(completed);
+    ready.push({ id, model: a.model ?? null, parallel_group: a.parallel_group ?? null });
+  }
   return ok({
-    feature: loadRunState(root).feature,
+    feature: state.feature,
     ready,
-    blocked: blockedArtifacts,
-    complete: graph.isComplete(completed),
+    blocked: graph.getBlocked(ledger),
+    gate_blocked: gateBlocked,
+    detected_on_disk: detectedOnDisk,
+    complete: graph.isComplete(ledger),
   });
 }
 
@@ -468,6 +493,11 @@ export function validateHandler(root: string, idOrPath: string): HandlerResult {
 }
 
 export function gateHandler(root: string, gateId: string, args: Record<string, string>): HandlerResult {
+  // An unknown gate id is a malformed invocation (exit 2), NOT a domain block (exit 1) —
+  // and it must never be recorded into the ledger as a failed verdict.
+  if (!isGateId(gateId)) {
+    return usage(`unknown gate "${gateId}" (known: ${listGates().join(', ')})`);
+  }
   const ctx = buildGateContext(root, args);
   const result = runGate(gateId, ctx);
   if (runStateExists(root)) {
@@ -580,7 +610,22 @@ export function schemaHandler(root: string, action: string, handoffId?: string):
     const target = schemaPath && fs.existsSync(schemaPath) ? schemaPath : null;
     if (!target) return usage('no active schema to validate — run "spin init"');
     try {
-      parseSchema(fs.readFileSync(target, 'utf-8'));
+      const schema = parseSchema(fs.readFileSync(target, 'utf-8'));
+      // Referential integrity: an editable schema must only cite handoff ids and gate ids
+      // that actually exist (the "closed sets") — else `spin complete`/`spin gate` would
+      // fail confusingly at runtime instead of here.
+      const refErrors: string[] = [];
+      for (const a of schema.artifacts) {
+        if (a.handoff && !isHandoffId(a.handoff)) {
+          refErrors.push(`artifact "${a.id}" references unknown handoff "${a.handoff}"`);
+        }
+      }
+      for (const [hook, val] of Object.entries(schema.gates ?? {})) {
+        for (const g of Array.isArray(val) ? val : [val]) {
+          if (!isGateId(g)) refErrors.push(`gate hook "${hook}" references unknown gate "${g}"`);
+        }
+      }
+      if (refErrors.length > 0) return blocked({ valid: false, errors: refErrors });
       return ok({ valid: true, schema: target });
     } catch (e) {
       return blocked({ valid: false, error: (e as Error).message });
@@ -593,9 +638,11 @@ export function listTaskKindsHandler(): HandlerResult {
   return ok({ kinds: listTaskKinds() });
 }
 
-export function reconcileHandler(opts: { audit?: string }): HandlerResult {
+export function reconcileHandler(root: string, opts: { audit?: string }): HandlerResult {
   if (!opts.audit) return usage('reconcile requires --audit <file>');
-  const auditPath = path.isAbsolute(opts.audit) ? opts.audit : path.join(process.cwd(), opts.audit);
+  // Honor --root like every other file-oriented command; resolve a relative --audit
+  // against the project root, not the process cwd.
+  const auditPath = path.isAbsolute(opts.audit) ? opts.audit : path.join(root, opts.audit);
   if (!fs.existsSync(auditPath)) {
     return usage(`audit file not found: ${auditPath}`);
   }
