@@ -10,8 +10,9 @@ Most spec-driven AI tools have one blind spot: when every check is green, you as
 
 - **"Done" can be a content verdict, not just a file existing** — for any artifact whose schema declares a `handoff:`, `spin complete` refuses to mark it done unless a Zod sidecar passes, and `G_BUILD` set-diffs every acceptance criterion. It also enforces criteria-set consistency *both ways* — blocking a **phantom** AC the build certifies that DEFINE never declared (an ID-set drift the spine catches with no disclosure; note this is *not* the same as a wrong-*value* drift, which is `spec-drift`'s job) — and, *when* a `passed` criterion cites a test file via `verified_by`, requires that file to exist (opt-in, existence-only — it doesn't make evidence mandatory).
 - **The deterministic spine is a *verifiable property*** — the no-model invariant is enforced by a guard that bans all network egress, not just LLM SDKs.
-- **The adversarial verifier outranks the generator** — on a CRITICAL gate the judging model tier is pinned ≥ the generator's and never downgrades; `G_REVIEW_BLOCK` (not the agent) decides.
+- **The adversarial verifier outranks the generator** — on a CRITICAL gate the judging model tier is pinned ≥ the generator's and never downgrades; `G_REVIEW_BLOCK` (not the agent) decides. The verifier can even be a *different vendor*: `/codex-review` runs OpenAI Codex against Claude's code **natively** (no third-party plugin), the strongest verifier ≠ generator, feeding the same gate.
 - **Spec↔build divergence is a first-class, typed loop** (`spin spec-drift`) — a green build can't silently leave a false spec behind once the correction is disclosed.
+- **Human sign-off is the seam applied to approval** — `G_SHIP` blocks until `spin approve` records a human, and `spin approve` refuses unless stdin is an interactive TTY. An automated agent cannot fake the approval, and any later edit (`spin invalidate`) voids it.
 
 > **Honest limit (on the record):** gates certify *structure and identity, not truth*. The spine can prove a file exists, a criterion is `passed`, a verifier is cited, the criteria sets are consistent — it **cannot** prove a CRC value is correct or that a non-executable prose claim is true. Spindle makes confidence *checkable*; it does not make meaning self-verifying. See [`docs/DOGFOOD_LOG_pix-brcode.md`](docs/DOGFOOD_LOG_pix-brcode.md) for where exactly that line falls.
 
@@ -30,7 +31,7 @@ spin  ─── deterministic spine ───  never calls a model
          spawned via Task tool
 ```
 
-`spin` is a pure state machine: it reads `.spindle/run.json`, applies Kahn ordering, validates handoffs against JSON schemas, enforces gates, and exits with a code. It never touches an inference endpoint. The slash commands (`/brainstorm`, `/define`, `/design`, `/build`, `/ship`, `/review`, `/migrate`) are the only place a model runs — they call `spin` for every ordering, validation, and gate decision, then branch strictly on the exit code.
+`spin` is a pure state machine: it reads `.spindle/run.json`, applies Kahn ordering, validates handoffs against JSON schemas, enforces gates, and exits with a code. It never touches an inference endpoint. The slash commands (`/brainstorm`, `/define`, `/design`, `/build`, `/ship`, `/iterate`, `/review`, `/codex-review`, `/audit`, `/migrate`, …) are the only place a model runs — they call `spin` for every ordering, validation, and gate decision, then branch strictly on the exit code.
 
 **Fake-dispatch anti-pattern (never do this):** dispatching a model from Node, calling `spin` to "help" an LLM decide, or advancing state without `spin complete --handoff`. Every gate is an exit code. Every state change is written by `spin`, not by Claude.
 
@@ -105,6 +106,15 @@ Copy `dist/` into your project and invoke `node dist/cli/index.js` directly. Pin
 | `spin config-drift --declared a,b --present a` | Tools required by CI but absent from the lockfile | 0 / 1 |
 | `spin spec-drift --build f.json` | Acceptance criteria the build CORRECTED vs DEFINE (`corrected_spec`) — a false spec can't ride a green build | 0 / 1 |
 | `spin schema show\|validate [handoffId]` | Inspect/validate the active schema; `show <handoff-id>` describes a handoff JSON shape | 0 / 1 / 2 |
+| `spin approve [--by <name>]` | Record human sign-off (required by `G_SHIP`). **Refuses unless run in an interactive TTY** — an agent cannot approve. No bypass flag | 0 / 2 |
+| `spin invalidate <id>` | After an `/iterate` edit: drop `<id>` + its downstream closure from the ledger and void all gate verdicts + approval, so no stale-green survives | 0 / 2 |
+| `spin trace` | Print the run-ledger timeline (`events[]`) + a tier/token summary — a pure read | 0 |
+| `spin eval [--strict]` | Replay the eval corpus through the **real** gates; exit 1 on any verdict regression. `--strict` also fails if a registry gate lacks a pass+block fixture | 0 / 1 |
+| `spin budget [--max-tokens n]` | Reconcile reported token spend per tier vs an optional ceiling. Advisory — always exit 0 | 0 |
+| `spin fanout-check` | Assert no `parallel_group` is partially complete (a dropped fan-out worker) | 0 / 1 |
+| `spin merge-findings <files...> [--out f]` | Deterministically merge N finding files (dedup by file+line+rule, keep higher severity, aggregate `sources`) into one `{findings,sources}` for `G_REVIEW_BLOCK` | 0 / 1 |
+| `spin kb-install <domain> [--from][--dest]` | Publish a generated KB domain (flat layout) from `.spindle/` into `plugin/kb/` so `kb_domains` resolves; pure file copy | 0 / 1 / 2 |
+| `spin kinds` | List known routing task-kinds | 0 |
 
 **Exit-code ABI:** `0` = pass · `1` = gate blocked / handoff invalid · `2` = usage error · `3` = internal error
 
@@ -118,8 +128,8 @@ Gates are run via `spin gate <id>`. A command that receives exit 1 surfaces `{ga
 |---|---|---|
 | `G_DEFINE` | `/design` | DEFINE sections present, AC-n IDs valid, define handoff valid |
 | `G_DESIGN` | `/build` | Manifest table present, design handoff valid |
-| `G_BUILD` | `/ship` | Every manifest file exists on disk; every DEFINE criterion `passed`; **no phantom criterion** (a `passed` AC-n DEFINE never declared → set-drift); a cited `verified_by` file must exist; BUILD_REPORT present |
-| `G_SHIP` | publish | DEFINE criteria minus build.passed must be empty; no phantom criterion; surfaces `spec-drift` |
+| `G_BUILD` | `/ship` | Every manifest file exists on disk; every DEFINE criterion `passed`; **no phantom criterion** (a `passed` AC-n DEFINE never declared → set-drift); a cited `verified_by` file must exist; **a passed criterion whose CI verifier reported `failed` blocks** (the spine reads the CI result, never runs the verifier); when `config.require_verified_by`, every passed criterion must cite a verifier; BUILD_REPORT present |
+| `G_SHIP` | publish | DEFINE criteria minus build.passed must be empty; no phantom criterion; surfaces `spec-drift`; **a human approval must be recorded via `spin approve`** — the seam applied to sign-off: a model cannot approve |
 | `G_KB_STRUCTURE` | KB publish | KB structure checks |
 | `G_KB_COVERAGE` | KB publish | KB coverage checks |
 | `G_ROUTER_COVERAGE` | router validate | Agent→routing bijection, no silent skips |
@@ -205,13 +215,14 @@ When all artifacts complete, `spin gate G_BUILD` must pass before `/ship` is all
 
 ### 6. Ship
 
-Run `/ship`. Gate fires:
+Run `/ship`. A human must sign off **first** — in an interactive terminal:
 
 ```bash
-spin gate G_SHIP
+spin approve --by "$USER"   # refuses unless stdin is a TTY — an agent cannot fake this
+spin gate G_SHIP            # blocks unless an approval is on record (and is cleared by any later edit)
 ```
 
-Exit 0 → the command assembles the SHIP doc and marks the feature complete.
+Exit 0 → the command assembles the SHIP doc and marks the feature complete. The approval is **stateful**: re-gating or `spin invalidate` voids it, so a post-approval edit forces a fresh sign-off.
 
 ---
 
@@ -231,6 +242,101 @@ Every workflow command follows these five steps — this is the whole mechanism:
 ```
 
 Deterministic decisions live in `spin`. Authoring lives in workers. Control flow branches on exit codes.
+
+---
+
+## Flows
+
+Five journeys cover essentially all use. In every one, `spin` decides and the model authors; the arrows are exit-code branches, not suggestions.
+
+### 1 — Greenfield SDD cycle
+
+The spine from idea to shipped feature. Each `spin gate` is a hard stop; `spin approve` is a human, in a real terminal, before ship.
+
+```
+/brainstorm ──▶ /define ──▶ /design ──▶ /build ──────▶ /ship
+     │            │            │           │              │
+  BRAINSTORM   G_DEFINE     G_DESIGN    G_BUILD        G_SHIP
+   + define    (sections,   (manifest,  (files exist,  (criteria met,
+    handoff     AC ids)      handoff)    AC met, CI     spec-drift clean,
+                                         verifier ok)   HUMAN APPROVAL)
+                                            │              ▲
+                                            │        spin approve  (TTY-only)
+                                            ▼
+                                     spin retry --inc (bounded by build_retry_cap)
+```
+
+### 2 — Design-driven KB + specialist generation
+
+`/design` declares `technologies[]`. The stack defines what knowledge and which specialists to generate — on demand, not from a pre-loaded catalog. A specialist **cannot ship without its KB**: `G_ROUTER_COVERAGE` checks every agent's `kb_domains` resolves.
+
+```
+/design  ──declares──▶  technologies: [iceberg, duckdb, ...]
+                              │
+        ┌─────────────────────┴─────────────────────┐
+        ▼                                            ▼
+  /create-kb <tech>                          /create-specialist <tech>
+   authors concepts in .spindle/              authors an agent w/ kb_domains:[<tech>]
+        │                                            │
+  spin kb-install <tech>                       /gen-router
+   copies → plugin/kb/<tech>                         │
+        └───────────────────▶ resolves ◀────── spin gate G_ROUTER_COVERAGE
+                                                (kb_domains must exist on disk)
+```
+
+### 3 — Build hardening: tests + cross-vendor review + human sign-off
+
+Three independent checks stand between a green build and a ship, each a different *verifier ≠ generator*: the CI verifier, an adversarial reviewer (Claude **and/or** OpenAI Codex, natively), and a human.
+
+```
+build worker ─▶ code + tests + build-report (verified_by + CI verified_by_result)
+                     │
+                     ▼
+              spin gate G_BUILD ──▶ blocks a passed criterion whose CI verifier FAILED
+                     │
+        ┌────────────┴─────────────┐
+        ▼                          ▼
+   /review  (Claude)        /codex-review  (OpenAI Codex, opt-in, fail-open)
+   findings (source=claude) findings (source=codex)
+        └─────────┬──────────────┘
+                  ▼
+        spin merge-findings  ──▶  spin gate G_REVIEW_BLOCK
+         (dedup, keep severity)    (surviving CRITICAL > 0 → BLOCK;
+                                    --min-sources to require >1 vendor)
+                  │
+                  ▼
+        spin approve (human, TTY) ──▶ spin gate G_SHIP ──▶ /ship
+```
+
+### 4 — Iterate cascade (no stale-green)
+
+Editing a gated artifact must invalidate everything downstream of it. `spin invalidate` drops the closure from the ledger and voids **all** gate verdicts and the approval — a re-edit can never ride an old green run.
+
+```
+/iterate edits DESIGN
+        │
+        ▼
+spin invalidate design
+        ├─ getDownstream(design) = { design, build, ship }   ← drop from completed[]
+        ├─ gates = {}                                          ← void ALL verdicts
+        └─ approval = null                                     ← void human sign-off
+        │
+        ▼
+re-author ▶ re-gate ▶ re-approve the cascade (spin next → … → G_SHIP)
+```
+
+### 5 — Brownfield (audit-first)
+
+For an existing codebase, the spine starts from an **audit** — structured evidence of what's built, what's missing, and what's coded-but-inert-in-prod — then flows into the same greenfield cycle, now grounded.
+
+```
+/audit ─▶ audit handoff { built[], gaps[], weakPoints[], opsReadiness[], proposedTasks[] }
+   │          │
+   │     spin gate G_AUDIT       (every built[] needs evidence; every gap a priority)
+   │     spin gate G_OPS_CONFIG  (no opsReadiness[] item enforced:false — coded ≠ in prod)
+   ▼
+/define ─▶ /design ─▶ /build ─▶ /ship   (the cycle from Flow 1, grounded in the audit)
+```
 
 ---
 
@@ -275,12 +381,15 @@ After editing, run `spin schema validate` before running any workflow command. T
 
 ## Test and CI story
 
-The harness ships with **222 unit, integration, and end-to-end tests** (run `npm test`) covering:
+The harness ships with **281 unit, integration, and end-to-end tests** (run `npm test`) covering:
 
-- Kahn ordering correctness under all dependency topologies
-- Gate pass/block logic for every gate ID (incl. phantom-criterion + evidence checks)
+- Kahn ordering correctness under all dependency topologies (incl. `getDownstream` closure)
+- Gate pass/block logic for every gate ID — phantom-criterion, evidence, CI-verifier-failed, `require_verified_by`, and the `G_SHIP` human-approval requirement
+- The `/iterate` cascade: `spin invalidate` drops the downstream closure and voids all verdicts + approval
+- Human approval is TTY-gated: `spin approve` refuses a non-interactive stdin (an agent cannot fake it)
 - Handoff schema validation for all 10 schema IDs
 - Exit-code ABI conformance
+- `spin eval` replays the corpus through the real gates so a gate that stops blocking is a caught regression
 - **No-model-calls guard** — the test suite asserts that no `spin` code path imports or invokes an inference SDK. This is enforced as a hard test failure, not a lint warning.
 - E2E: a full `sdd` cycle from `spin init` through `spin gate G_SHIP`, using fixture artifacts and handoffs, verifying that every `spin complete` and gate transition produces the correct `run.json` state.
 
