@@ -1,6 +1,6 @@
 ---
 name: fact-check
-description: Pipeline that extracts claims from a document, fans out parallel verification per claim, then runs a parallel correction pass for false/unverifiable claims. spin sequences and validates every claim handoff.
+description: Pipeline that extracts claims from a document, fans out parallel verification per claim, then runs a parallel correction pass for false/unverifiable claims. Every claim handoff is validated with spin handoff-check claim against the claim schema.
 ---
 
 # /fact-check
@@ -10,19 +10,7 @@ Fact-check a document via a three-stage pipeline:
 2. **verify-workers** (sonnet, parallel) — one worker per claim, each writes a `claim` handoff (`{claims:[{id,text,verified,verdict,evidence}]}`).
 3. **correction pass** (sonnet, parallel) — one verify-worker rerun per flagged claim (`verdict=="false"` or `"unverifiable"`), writing a `claim` handoff with corrected `text` and an `evidence` field describing the correction.
 
-spin owns all sequencing, gate enforcement, and handoff validation. The command never advances past a stage if `spin complete` exits 1.
-
----
-
-## Setup
-
-Before the first stage, initialise the fact-check artifact graph:
-
-```bash
-spin init --schema fact-check --feature fact-check
-```
-
-This scaffolds `.spindle/` with a `schema.yaml` defining artifacts `extract`, `verify-<id>`, and `correct-<id>` each bound to handoff type `claim`, so every subsequent `spin complete` and `spin retry` resolves against a real schema.
+spin validates every handoff with `spin handoff-check claim <file>` before the pipeline advances. This command is standalone — it does not require `spin init` or run state.
 
 ---
 
@@ -57,14 +45,14 @@ Dispatch **one** `factcheck-extract-worker` Task on the returned model.
 > Schema id: `claim`. Wrap all claims in a top-level `claims` array:
 > `{"claims":[{"id":"claim-0","text":"..."},...]}`
 
-After the worker returns:
+After the worker returns, validate the handoff:
 
 ```bash
-spin complete extract --handoff .spindle/features/fact-check/.handoffs/extract.json
+spin handoff-check claim .spindle/features/fact-check/.handoffs/extract.json
 ```
 
 - Exit 0 → proceed to Stage 2.
-- Exit 1 → handoff invalid. Run `spin retry extract --inc`; if that exits 1 (ceiling hit), STOP and surface the error. Otherwise re-dispatch the extract-worker.
+- Exit 1 → handoff invalid. Re-dispatch the extract-worker with the validation errors surfaced as feedback. If the worker fails a second time, STOP and surface the error.
 
 ---
 
@@ -94,15 +82,15 @@ Fan out **all claims in a single message** — one `factcheck-verify-worker` Tas
 > Schema id: `claim`. Wrap the single result in a `claims` array:
 > `{"claims":[{"id":"<claim.id>","text":"<claim.text>","verified":true,"verdict":"<verdict>","evidence":"<evidence>"}]}`
 
-After **all** verify-workers return, complete each one:
+After **all** verify-workers return, validate each handoff:
 
 ```bash
 # repeat for every claim id
-spin complete verify-<claim.id> --handoff .spindle/features/fact-check/.handoffs/verify-<claim.id>.json
+spin handoff-check claim .spindle/features/fact-check/.handoffs/verify-<claim.id>.json
 ```
 
-- Exit 1 on any → `spin retry verify-<claim.id> --inc`, re-dispatch that single `factcheck-verify-worker`. Stop at ceiling.
-- Once all claims are marked complete, proceed to Stage 3.
+- Exit 1 on any → re-dispatch that single `factcheck-verify-worker` with the validation errors as feedback. If it fails again, mark that claim as unresolved and continue.
+- Once all claims pass validation, proceed to Stage 3.
 
 ---
 
@@ -133,13 +121,13 @@ Fan out **all flagged claims in a single message** — one `factcheck-verify-wor
 > Schema id: `claim`. Wrap in a `claims` array:
 > `{"claims":[{"id":"<claim.id>","text":"<corrected text>","verified":true,"verdict":"<verdict>","evidence":"<correction note>"}]}`
 
-After all correction workers return, complete each one:
+After all correction workers return, validate each handoff:
 
 ```bash
-spin complete correct-<claim.id> --handoff .spindle/features/fact-check/.handoffs/correct-<claim.id>.json
+spin handoff-check claim .spindle/features/fact-check/.handoffs/correct-<claim.id>.json
 ```
 
-- Exit 1 → `spin retry correct-<claim.id> --inc`, re-dispatch. Stop at ceiling.
+- Exit 1 → re-dispatch that single `factcheck-verify-worker` with the validation errors as feedback. If it fails again, mark that claim as unresolved.
 
 ---
 
@@ -150,6 +138,6 @@ Surface the pipeline summary to the user:
 - Total claims extracted
 - Verified: N `"true"` / N `"false"` / N `"unverifiable"`
 - Corrections produced: list each `claim.id` with the corrected text and `evidence` note
-- Any handoffs that hit the retry ceiling (manual review required)
+- Any claims that failed handoff validation twice (manual review required)
 
 Do not merge corrections back into the source file unless the user explicitly requests it.

@@ -19,7 +19,7 @@ description: Update any phase document when requirements or design change (Cross
 /iterate BRAINSTORM_SEARCH_API.md "Consider ElasticSearch instead of PostgreSQL full-text search"
 /iterate DEFINE_SEARCH_API.md "Add support for fuzzy matching, not just exact search"
 /iterate DESIGN_SEARCH_API.md "Services need to be self-contained, no shared common/"
-/iterate .claude/sdd/features/DEFINE_AUTH.md "Change from JWT to session-based auth"
+/iterate .spindle/features/auth/DEFINE_AUTH.md "Change from JWT to session-based auth"
 ```
 
 ---
@@ -199,4 +199,4 @@ Each document maintains revision history:
 ## References
 
 - Agent: `${CLAUDE_PLUGIN_ROOT}/agents/workflow/iterate-agent.md`
-- Contracts: `${CLAUDE_PLUGIN_ROOT}/sdd/architecture/WORKFLOW_CONTRACTS.yaml`
+- Schema: `${CLAUDE_PLUGIN_ROOT}/schemas/sdd/schema.yaml`

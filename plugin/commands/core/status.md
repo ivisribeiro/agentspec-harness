@@ -33,15 +33,15 @@ Execute all steps inline (no agent delegation) and produce the report directly.
 
 ```text
 # Active features
-Glob(".claude/sdd/features/BRAINSTORM_*.md")
-Glob(".claude/sdd/features/DEFINE_*.md")
-Glob(".claude/sdd/features/DESIGN_*.md")
+Glob(".spindle/features/*/BRAINSTORM*.md")
+Glob(".spindle/features/*/DEFINE*.md")
+Glob(".spindle/features/*/DESIGN*.md")
 
 # Build reports
-Glob(".claude/sdd/reports/BUILD_REPORT_*.md")
+Glob(".spindle/features/*/BUILD_REPORT*.md")
 
 # Recently shipped
-Glob(".claude/sdd/archive/*")
+Glob(".spindle/features/*/SHIPPED*.md")
 ```
 
 For each discovered document:

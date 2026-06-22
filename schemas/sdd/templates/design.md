@@ -254,4 +254,4 @@
 
 ## Next Step
 
-**Ready for:** `/build .claude/sdd/features/DESIGN_{FEATURE_NAME}.md`
+**Ready for:** `/build .spindle/features/{FEATURE_NAME}/DESIGN.md`

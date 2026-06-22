@@ -186,4 +186,4 @@ Assumptions that if wrong could invalidate the design:
 
 ## Next Step
 
-**Ready for:** `/design .claude/sdd/features/DEFINE_{FEATURE_NAME}.md`
+**Ready for:** `/design .spindle/features/{FEATURE_NAME}/DEFINE.md`

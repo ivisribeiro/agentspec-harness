@@ -43,20 +43,19 @@ Use `/iterate` to update any phase document when requirements change. It detects
 
 ## Templates
 
-Phase templates are available at `${CLAUDE_PLUGIN_ROOT}/sdd/templates/`:
-- `BRAINSTORM_TEMPLATE.md`
-- `DEFINE_TEMPLATE.md`
-- `DESIGN_TEMPLATE.md`
-- `BUILD_REPORT_TEMPLATE.md`
-- `SHIPPED_TEMPLATE.md`
+Phase templates are available at `${CLAUDE_PLUGIN_ROOT}/schemas/sdd/templates/`:
+- `brainstorm.md`
+- `define.md`
+- `design.md`
+- `build-report.md`
+- `shipped.md`
 
-## Workflow Contracts
+## Workflow Schema
 
-Phase transition rules are defined in `${CLAUDE_PLUGIN_ROOT}/sdd/architecture/WORKFLOW_CONTRACTS.yaml`.
+Phase gate rules are defined in `${CLAUDE_PLUGIN_ROOT}/schemas/sdd/schema.yaml`.
 
 ## Output Locations
 
 All SDD documents are written to the user's project workspace:
-- Features: `.claude/sdd/features/`
-- Reports: `.claude/sdd/reports/`
-- Archive: `.claude/sdd/archive/{FEATURE}/`
+- Features: `.spindle/features/<feature>/`
+- Handoffs: `.spindle/features/<feature>/.handoffs/`
