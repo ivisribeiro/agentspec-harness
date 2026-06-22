@@ -11,6 +11,7 @@ import {
   budgetHandler,
   fanoutCheckHandler,
   kbInstallHandler,
+  mergeFindingsHandler,
   validateHandler,
   gateHandler,
   diffCriteriaHandler,
@@ -132,6 +133,7 @@ export async function runCli(
     .option('--routing <file>', 'routing.json (G_ROUTER_COVERAGE)')
     .option('--kb <dir>', 'kb dir for kb_domains referential check (G_ROUTER_COVERAGE; default plugin/kb)')
     .option('--findings <file>', 'findings.json (G_REVIEW_BLOCK)')
+    .option('--min-sources <n>', 'G_REVIEW_BLOCK: require >=n distinct review sources')
     .option('--handoff <file>', 'audit.json sidecar (G_AUDIT)')
     .option('--audit <file>', 'audit.json sidecar (G_OPS_CONFIG, G_PLAN)')
     .action(function (this: Command, gateId, opts) {
@@ -140,9 +142,18 @@ export async function runCli(
       if (opts.routing) args.routing = opts.routing;
       if (opts.kb) args.kb = opts.kb;
       if (opts.findings) args.findings = opts.findings;
+      if (opts.minSources) args['min-sources'] = opts.minSources;
       if (opts.handoff) args.handoff = opts.handoff;
       if (opts.audit) args.audit = opts.audit;
       emit(gateHandler(root(this), gateId, args));
+    });
+
+  program
+    .command('merge-findings <files...>')
+    .description('deterministically merge N finding files (dedup by file+line+rule, keep higher severity, aggregate sources) into one {findings,sources} for G_REVIEW_BLOCK')
+    .option('--out <file>', 'write the merged result here (else stdout)')
+    .action(function (this: Command, files, opts) {
+      emit(mergeFindingsHandler(root(this), files, opts));
     });
 
   program
