@@ -35,22 +35,28 @@ isolation works across siblings, and a known gap you must compensate for manuall
 
 ---
 
-## Known gap: no gate assertion on group completeness
+## Group completeness: `spin fanout-check`
 
-The gate layer (`src/core/gates/`) has no code that reads `parallel_group`. Gates
-check for specific artifacts, file presence, schema validity, and criteria coverage —
-they do NOT verify that every member of a `parallel_group` reached a terminal state
-before the gate ran.
+The phase gates (`src/core/gates/`) do not themselves read `parallel_group` — they
+check artifacts, file presence, schema validity, and criteria coverage. So a phase
+gate run while a sibling is still in flight (or was silently dropped) could pass on
+partial work. **`spin fanout-check` closes that hole:** it reads the run-ledger and
+the graph (via `fanoutCheckHandler` in `src/commands/handlers.ts`, using
+`getAllArtifacts().parallel_group`) and exits `1` if any `parallel_group` is partially
+complete — started but not finished — naming the dropped members
+(`incomplete-group:<group>:<id>`).
 
-**What this means in practice:** if you call `spin gate G_DEFINE` while a sibling
-in the same `parallel_group` is still in flight or failed silently, the gate may
-pass on partial work. The responsibility to wait belongs to the command, not the
-engine.
+**Run it before the phase gate:**
 
-**Compensate by:** running `spin complete <id> --handoff <sidecar>` for EVERY
-artifact in the group before calling the phase gate, even if some failed. A failed
-`spin complete` (exit 1) triggers the retry loop for that artifact; the gate runs
-only after every sibling is in a terminal state (complete or failed-at-ceiling).
+```bash
+spin fanout-check     # exit 0: every group is all-or-nothing complete; exit 1: a sibling was dropped
+spin gate <gateId>    # only after fanout-check is green
+```
+
+It is a check command, not yet auto-invoked by the gates — the command runs it at the
+boundary (the same way it runs `spin complete` for every sibling). A failed
+`spin complete` (exit 1) still triggers that artifact's retry loop; `fanout-check` is
+the deterministic backstop proving no sibling silently vanished.
 
 ---
 
@@ -215,7 +221,7 @@ spin diff-criteria --define .spindle/features/my-feature/DEFINE.md \
 | Anti-pattern | Why it breaks | Correct approach |
 |---|---|---|
 | Dispatching parallel siblings sequentially | Wastes wall time; misrepresents the concurrency model | Fan out all same-`parallel_group` artifacts in ONE message |
-| Calling `spin gate` before all siblings reach a terminal state | Gate sees partial work (known gap — engine does not catch this) | Wait for every `spin complete` / retry-ceiling before gating |
+| Calling `spin gate` before all siblings reach a terminal state | Gate sees partial work | Run `spin fanout-check` (exit 1 on a dropped sibling) before gating, after every `spin complete` / retry-ceiling |
 | `spin complete <id>` without `--handoff` | Skips schema validation; G_HANDOFF will block | Always pass `--handoff <sidecar>` when the artifact declares a `handoff` schema |
 | Advancing to the next phase without calling `spin gate` | Skips the deterministic checkpoint; may ship invalid artifacts | Gate every phase boundary; branch strictly on exit code |
 | Retrying without `spin retry --ok` | Infinite loop on permanent failures | Use `--inc` / `--ok` against `build_retry_cap` |

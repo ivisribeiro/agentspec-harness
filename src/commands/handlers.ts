@@ -203,6 +203,48 @@ export function budgetHandler(root: string, opts: { maxTokens?: string }): Handl
   });
 }
 
+export function fanoutCheckHandler(root: string): HandlerResult {
+  if (!runStateExists(root)) return usage('no run state — run "spin init" first');
+  const graph = activeGraph(root);
+  const completed = completedSet(root);
+
+  const groups = new Map<string, string[]>();
+  for (const a of graph.getAllArtifacts()) {
+    if (a.parallel_group) {
+      const members = groups.get(a.parallel_group) ?? [];
+      members.push(a.id);
+      groups.set(a.parallel_group, members);
+    }
+  }
+
+  const reasons: string[] = [];
+  const unmet: string[] = [];
+  const checked: Array<{ group: string; members: number; complete: number }> = [];
+  for (const [group, members] of groups) {
+    const done = members.filter((m) => completed.has(m));
+    checked.push({ group, members: members.length, complete: done.length });
+    // A parallel group that is STARTED (>=1 done) but not FINISHED at a phase boundary
+    // means a fanned-out worker was dropped — the silent failure parallel-fanout itself
+    // could not catch. Run this before the phase gate.
+    if (done.length > 0 && done.length < members.length) {
+      const missing = members.filter((m) => !completed.has(m));
+      reasons.push(
+        `parallel group "${group}" is partially complete (${done.length}/${members.length}) — dropped worker(s): ${missing.join(', ')}`
+      );
+      for (const m of missing) unmet.push(`incomplete-group:${group}:${m}`);
+    }
+  }
+
+  const result = {
+    feature: loadRunState(root).feature,
+    groups: checked,
+    passed: unmet.length === 0,
+    reasons,
+    unmet,
+  };
+  return unmet.length === 0 ? ok(result) : blocked(result);
+}
+
 export function nextHandler(root: string): HandlerResult {
   if (!runStateExists(root)) return usage('no run state — run "spin init" first');
   const graph = activeGraph(root);
