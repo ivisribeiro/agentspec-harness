@@ -35,9 +35,13 @@ The part nobody else wrote — the reason Spindle exists as a distinct product:
   specialist agent roster (`plugin/agents/`), the knowledge-base domains (`plugin/kb/`),
   and the data-engineering command surface. Routed and gated by Spindle's harness; files
   carry an `origin:` stamp where adapted.
-- **ECC** (© 2026 Affaan Mustafa, MIT) — the harness-pattern doctrine (adversarial gate,
-  bounded loop, parallel fan-out, model routing) adapted into Spindle skills under
-  `plugin/skills/`. Those skills carry `origin: ecc` in frontmatter.
+- **ECC** (© 2026 Affaan Mustafa, MIT) — the original harness-pattern doctrine
+  (adversarial gate, bounded loop, parallel fan-out, model routing) that inspired the
+  four Spindle skills of the same names under `plugin/skills/`. Those skills have since
+  been **re-authored from the code up** — each now fronts a concrete Spindle `src/`
+  mechanism (e.g. `gReviewBlock`, `retryHandler`/`incRetry`, `parallel_group`,
+  `TASK_KINDS`/`classifyTier`) that has no ECC counterpart, so they no longer carry an
+  `origin:` stamp; this credit records the lineage of the idea, not of the code.
 
 If you are looking for the legal notice, it is in [LICENSE](./LICENSE). If you find an
 attribution gap, open an issue — getting credit right matters.
