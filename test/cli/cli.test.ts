@@ -248,4 +248,41 @@ describe('spin CLI exit-code ABI', () => {
     const r = await cli(['--root', root, 'trace']);
     expect(r.code).toBe(2);
   });
+
+  // --- spin budget: token accounting (Measured Harness, Fase 3) ---
+
+  it('budget reports null spend on a fresh run (exit 0)', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const r = await cli(['--root', root, 'budget']);
+    expect(r.code).toBe(0);
+    expect(r.json.reported).toBe(null);
+    expect(r.json.over_budget).toBe(false);
+  });
+
+  it('budget sums reported usage per tier and flags over_budget but stays advisory (exit 0)', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const file = `${root}/define.json`;
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        feature: 'f',
+        clarity: 0.9,
+        criteria: ['AC-1'],
+        usage: { tier: 'opus', tokens_in: 800, tokens_out: 400 },
+      })
+    );
+    await cli(['--root', root, 'complete', 'define', '--handoff', file]);
+    const r = await cli(['--root', root, 'budget', '--max-tokens', '1000']);
+    expect(r.code).toBe(0); // advisory — never blocks legitimate spend
+    expect(r.json.reported.total).toBe(1200);
+    expect(r.json.by_tier.opus.tokens_in).toBe(800);
+    expect(r.json.over_budget).toBe(true);
+    expect(r.json.warning).toContain('exceeds');
+  });
+
+  it('budget rejects a non-numeric --max-tokens (exit 2)', async () => {
+    await cli(['--root', root, 'init', '--schema', 'sdd', '--feature', 'f']);
+    const r = await cli(['--root', root, 'budget', '--max-tokens', 'lots']);
+    expect(r.code).toBe(2);
+  });
 });

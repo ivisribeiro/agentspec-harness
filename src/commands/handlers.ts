@@ -148,6 +148,61 @@ export function traceHandler(root: string): HandlerResult {
   });
 }
 
+export function budgetHandler(root: string, opts: { maxTokens?: string }): HandlerResult {
+  if (!runStateExists(root)) return usage('no run state — run "spin init" first');
+  let max: number | null = null;
+  if (opts.maxTokens !== undefined) {
+    const n = Number(opts.maxTokens);
+    if (!Number.isFinite(n) || n < 0) return usage('--max-tokens must be a non-negative number');
+    max = Math.floor(n);
+  }
+
+  const state = loadRunState(root);
+  const completes = state.events.filter(
+    (e): e is Extract<RunEvent, { kind: 'complete' }> => e.kind === 'complete'
+  );
+
+  // Reconcile reported spend per tier. The CLI only SUMS numbers the model handed it
+  // on the handoff sidecar — it never tokenizes, estimates, or prices. This is
+  // accounting, not enforcement: it cannot independently verify a self-reported count.
+  const byTier: Record<string, { completions: number; tokens_in: number; tokens_out: number }> = {};
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let anyReported = false;
+  for (const c of completes) {
+    const tier = c.usage?.tier ?? 'unreported';
+    const bucket = (byTier[tier] ??= { completions: 0, tokens_in: 0, tokens_out: 0 });
+    bucket.completions += 1;
+    if (c.usage?.tokens_in != null) {
+      bucket.tokens_in += c.usage.tokens_in;
+      tokensIn += c.usage.tokens_in;
+      anyReported = true;
+    }
+    if (c.usage?.tokens_out != null) {
+      bucket.tokens_out += c.usage.tokens_out;
+      tokensOut += c.usage.tokens_out;
+      anyReported = true;
+    }
+  }
+  const total = tokensIn + tokensOut;
+  const overBudget = max != null && anyReported && total > max;
+
+  // ADVISORY by design: always exit 0. A genuinely T2 task SHOULD cost a lot; budget
+  // accounting must never block legitimate spend. The signal is the `over_budget`
+  // flag + warning, not an exit code.
+  return ok({
+    feature: state.feature,
+    reported: anyReported ? { tokens_in: tokensIn, tokens_out: tokensOut, total } : null,
+    by_tier: byTier,
+    max_tokens: max,
+    over_budget: overBudget,
+    advisory: true,
+    warning: overBudget
+      ? `reported spend ${total} tokens exceeds the declared budget of ${max} — advisory only, not enforced`
+      : null,
+  });
+}
+
 export function nextHandler(root: string): HandlerResult {
   if (!runStateExists(root)) return usage('no run state — run "spin init" first');
   const graph = activeGraph(root);
