@@ -1,18 +1,26 @@
-# AgentSpec Agents
+# Spindle Worker Agents
 
-AgentSpec deploys **58 specialized agents** across **8 categories**, each built on a **three-tier template system** with mandatory **KB-First knowledge resolution**. Every agent carries a cognitive framework that enforces structured confidence scoring, provenance tracking, and explicit stop conditions -- turning raw LLM capability into disciplined, auditable domain expertise.
+Spindle ships **65 routed worker agents**, each built on a **three-tier template system**
+with mandatory **KB-First knowledge resolution**. Every agent carries a cognitive
+framework that enforces structured confidence scoring, provenance tracking, and explicit
+stop conditions -- turning raw LLM capability into disciplined, auditable domain expertise.
 
-`58 agents | 8 categories | 3 tiers (T1/T2/T3) | 24 KB domains | 100% template compliance`
+A worker never decides control flow: a slash command dispatches it via the Task tool on
+the tier `spin route` returns, the worker authors one artifact plus one typed handoff
+sidecar, and the harness gates the result. `G_ROUTER_COVERAGE` asserts a bijection
+between this roster and the routing table — every agent reachable, none orphaned.
+
+`65 agents | 3 tiers (T1/T2/T3) | 24 KB domains | G_ROUTER_COVERAGE-enforced roster`
 
 ---
 
 ## How Agents Work (Cognitive Architecture)
 
-AgentSpec agents are not raw LLM prompts. They operate through a three-layer cognitive architecture that separates routing, reasoning, and domain knowledge.
+Spindle's worker agents are not raw LLM prompts. They operate through a three-layer cognitive architecture that separates routing, reasoning, and domain knowledge.
 
 ### Layer 1: Claude Code Orchestrator (Router)
 
-The orchestrator is Claude Code itself. It reads all 58 agent description fields from frontmatter, pattern-matches user messages to agent capabilities, and launches the best-fit agent. The orchestrator:
+The orchestrator is Claude Code itself. It reads all 65 agent description fields from frontmatter, pattern-matches user messages to agent capabilities, and launches the best-fit agent. The orchestrator:
 
 - Maintains memory, tasks, and plans across messages
 - Selects agents based on trigger phrases, file types, and context
@@ -40,7 +48,7 @@ User
   |
   v
 Orchestrator (Claude Code)
-  |-- reads 58 agent descriptions from frontmatter
+  |-- reads 65 agent descriptions from frontmatter
   |-- pattern-matches message to capabilities
   |-- selects best-fit agent
   v
@@ -84,11 +92,12 @@ Every agent declares a tier in frontmatter (`tier: T1|T2|T3`). The tier governs 
 | Changelog | -- | -- | Required |
 | Remember | Required | Required | Required |
 
-### Current Distribution
+### Tier is declared per agent, not tracked here
 
-- **T1 (10 agents):** genai-architect, medallion-architect, aws-data-architect, gcp-data-architect, ai-prompt-specialist, python-developer, lakeflow-specialist, spark-performance-analyzer, spark-troubleshooter, prompt-crafter
-- **T2 (28 agents):** data-platform-engineer, kb-architect, lakehouse-architect, pipeline-architect, schema-designer, the-planner, ai-data-engineer-gcp, code-cleaner, code-documenter, code-reviewer, data-contracts-engineer, data-quality-analyst, test-generator, ai-data-engineer, dbt-specialist, spark-engineer, spark-specialist, sql-optimizer, streaming-engineer, codebase-explorer, meeting-analyst, shell-script-specialist, brainstorm-agent, build-agent, define-agent, design-agent, iterate-agent, ship-agent
-- **T3 (20 agents):** ai-data-engineer-cloud, ai-prompt-specialist-gcp, aws-deployer, aws-lambda-architect, ci-cd-specialist, lambda-builder, supabase-specialist, fabric-ai-specialist, fabric-architect, fabric-cicd-specialist, fabric-logging-specialist, fabric-pipeline-developer, fabric-security-specialist, llm-specialist, airflow-specialist, lakeflow-architect, lakeflow-expert, lakeflow-pipeline-builder, qdrant-specialist, spark-streaming-architect
+Each agent declares its tier in frontmatter (`tier: T1|T2|T3`) — that is the single
+source of truth. This doc deliberately does not hand-maintain a per-tier roster
+enumeration: it drifts the moment an agent is added or retiered. `G_ROUTER_COVERAGE`
+is what keeps the roster honest — it asserts every agent is routed exactly once.
 
 ---
 
@@ -128,7 +137,10 @@ KB SILENT        | MCP-ONLY(0.85) | N/A            | LOW (0.50)     |
 
 ---
 
-## Agent Categories
+## Specialist agents (52)
+
+Domain specialists, dispatched on demand when a workflow phase or a slash command needs
+deep expertise. Routed by `spin route`, gated by `G_ROUTER_COVERAGE`.
 
 ### 1. Architect (8 agents)
 
@@ -231,18 +243,58 @@ Developer tools and productivity.
 | `meeting-analyst` | T2 | sonnet | Extract decisions and action items from meetings |
 | `shell-script-specialist` | T2 | sonnet | Production-grade Bash scripts, automation, deployment scripts |
 
-### 8. Workflow (6 agents)
+---
 
-Drive the SDD workflow phases.
+## Harness workers (13)
 
-| Agent | Tier | Model | Phase | Purpose |
-|-------|------|-------|-------|---------|
-| `brainstorm-agent` | T2 | sonnet | 0 | Explore ideas through collaborative dialogue |
-| `define-agent` | T2 | sonnet | 1 | Capture requirements with clarity scoring |
-| `design-agent` | T2 | opus | 2 | Create technical architecture with file manifest |
-| `build-agent` | T2 | opus | 3 | Execute implementation with agent delegation |
-| `ship-agent` | T2 | sonnet | 4 | Archive with lessons learned |
-| `iterate-agent` | T2 | sonnet | All | Update documents with cascade awareness |
+Spindle's own typed workers — the agents that drive the harness workflows. Unlike the
+specialists above, each one authors exactly one artifact plus one typed handoff sidecar
+and never decides control flow; the slash command dispatches it on the routed tier and
+`spin` gates the result. Tiers follow the model-routing doctrine (mechanical → Haiku,
+authoring/analysis → Sonnet, intent/adversarial → Opus).
+
+### Workflow (4) — drive the SDD phases
+
+| Worker | Model | Phase | Authors |
+|--------|-------|-------|---------|
+| `define-worker` | opus | DEFINE | DEFINE.md (Why/What/Acceptance) + `define` handoff |
+| `design-worker` | opus | DESIGN | DESIGN.md (Overview + File Manifest) + `design` handoff |
+| `build-worker` | sonnet | BUILD | the build output + `build-report` handoff |
+| `ship-worker` | haiku | SHIP | the archive prose + `ship` handoff |
+
+### Review (2) — dimensions for `/review`
+
+| Worker | Model | Authors |
+|--------|-------|---------|
+| `arch-worker` | sonnet | architecture / quality `finding` handoffs |
+| `security-worker` | sonnet | OWASP / secret / injection `finding` handoffs |
+
+### Migrate (3) — legacy ETL migration for `/migrate`
+
+| Worker | Model | Authors |
+|--------|-------|---------|
+| `migrate-dbt-worker` | sonnet | a dbt `migration-plan` handoff |
+| `migrate-spark-worker` | sonnet | a Spark `migration-plan` handoff |
+| `equivalence-worker` | sonnet | an independent equivalence check on a chosen plan |
+
+### Fact-check (2) — claim verification for `/fact-check`
+
+| Worker | Model | Authors |
+|--------|-------|---------|
+| `factcheck-extract-worker` | haiku | discrete `Claim[]` extracted from a document |
+| `factcheck-verify-worker` | sonnet | per-claim verdicts backed by codebase evidence |
+
+### Knowledge base (1) — concept authoring for `/create-kb`
+
+| Worker | Model | Authors |
+|--------|-------|---------|
+| `kb-concept-worker` | sonnet | one `concept-<slug>.md` + `kb-concept` handoff |
+
+### Adversary (1) — the critical-gate skeptic
+
+| Worker | Model | Authors |
+|--------|-------|---------|
+| `challenger` | opus | a refutation attempt against a claim / finding / plan before a CRITICAL gate |
 
 ---
 
@@ -252,9 +304,9 @@ Agents are not isolated. When a task crosses domain boundaries, agents escalate 
 
 ```text
 Workflow <-> Data Engineering:
-  build-agent -> dbt-specialist, spark-engineer, pipeline-architect (DE delegation)
-  design-agent -> schema-designer (data modeling), pipeline-architect (DAG design)
-  define-agent -> data-contracts-engineer (SLAs), data-quality-analyst (metrics)
+  build-worker -> dbt-specialist, spark-engineer, pipeline-architect (DE delegation)
+  design-worker -> schema-designer (data modeling), pipeline-architect (DAG design)
+  define-worker -> data-contracts-engineer (SLAs), data-quality-analyst (metrics)
 
 Python <-> Data Engineering:
   code-reviewer -> sql-optimizer (SQL anti-patterns), data-quality-analyst (PII)

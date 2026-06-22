@@ -1,6 +1,7 @@
 ---
 name: model-routing
 description: Model-routing doctrine for the spindle — when to pick Haiku, Sonnet, or Opus for a task kind, the two hard rules that protect critical gates, and how to ask the CLI for the tier via `spin route`. Use when a workflow command needs to choose the model for a worker subagent, when adding a new task-kind, or when a `--budget low` run wants to downgrade a tier safely.
+origin: ecc
 ---
 
 # Model routing
@@ -173,7 +174,7 @@ the cheap tier is only acceptable because the gate will catch it if it is wrong.
    `G_ROUTER_COVERAGE` still sees a clean agent→routing bijection (no silent
    skips).
 
-> Adapted from the ECC model-selection doctrine (Haiku ≈ 90% of Sonnet at lower
-> cost for high-frequency mechanical work; Sonnet for core authoring/analysis;
-> Opus for deepest reasoning and adversarial review). The harness makes it
-> enforceable by binding the cheap tiers to deterministic gates.
+> The tier doctrine: Haiku ≈ 90% of Sonnet at lower cost for high-frequency
+> mechanical work; Sonnet for core authoring/analysis; Opus for deepest reasoning
+> and adversarial review. The harness makes it enforceable by binding the cheap
+> tiers to deterministic gates. (Provenance: see CREDITS.md.)

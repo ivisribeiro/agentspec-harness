@@ -293,4 +293,29 @@ invoke the compiled `dist/cli/index.js`.
 - [ ] New worker agent has valid `name`/`description` frontmatter and a route
       (`G_ROUTER_COVERAGE` green).
 - [ ] `npm run build` clean; `npm test` green, **including the model-free guard
-      test**; coverage not regressed (`npm run test:coverage`).
+      test and the authorship guard**; coverage not regressed (`npm run test:coverage`).
+
+---
+
+## 11. Vocabulary — Spindle's terms (and the upstream nouns to retire)
+
+Spindle is its own product, not a visible fork. Use these terms in code, comments,
+docs, commands, and worker prose. The authorship guard (`scripts/guard-no-fork-tells.js`,
+run in CI and as a vitest test) **fails the build if an upstream source name leaks into
+`plugin/` prose** — provenance lives in `CREDITS.md` and per-file `origin:` frontmatter
+stamps, nowhere else.
+
+| Use this | Not this | Meaning |
+|---|---|---|
+| **the seam** | — | the one boundary where the model side calls the deterministic `spin` CLI and branches on its exit code |
+| **artifact graph** | OpenSpec "change" / "proposal" | the Kahn-ordered DAG of phase artifacts a run advances through |
+| **handoff sidecar** | — | the typed `.json` a worker writes beside its `.md`, validated by `spin complete --handoff` |
+| **run-ledger** | — | `.spindle/run.json`, CLI-written only — the crash-safe record of `completed[]` / `retries{}` / `gates{}` |
+| **gate verdict** | — | a gate's `{passed, reasons[], unmet[]}`, surfaced via exit code |
+| **worker** | "AgentSpec agent" | a subagent that authors one artifact + one handoff and never decides control flow |
+| **orchestration tier** (T0/T1/T2) | — | how much machinery a task warrants: solo / one worker / fan-out + adversary |
+| **routed tier** (Haiku/Sonnet/Opus) | — | the model a task-kind runs on, returned by `spin route` |
+
+Naming rule: never write **AgentSpec**, **OpenSpec**, or **ECC** into `plugin/` prose.
+Credit upstreams once in `CREDITS.md`; stamp an adapted file with `origin: <source>` in
+its frontmatter (the guard allows the literal only on an `origin:` line).

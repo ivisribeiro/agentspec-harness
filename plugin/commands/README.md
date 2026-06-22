@@ -1,4 +1,4 @@
-# AgentSpec Commands
+# Spindle Commands
 
 **31 slash commands** for the SDD workflow, data engineering, visualization, and developer productivity.
 
@@ -84,6 +84,6 @@ claude> /sql-review models/staging/
 
 # Visual explainer
 claude> /generate-web-diagram "Data pipeline architecture"
-claude> /generate-slides "AgentSpec overview for stakeholders"
+claude> /generate-slides "Spindle overview for stakeholders"
 claude> /diff-review main
 ```

@@ -21,6 +21,10 @@ jobs:
       - run: npm ci
       - name: Build (typecheck + bundle)
         run: npm run build
+      - name: Guards (model-free spine + authorship)
+        run: |
+          npm run guard
+          npm run guard:authorship
       - name: Test
         run: npm test
       - name: Coverage gate (80% on src/core)

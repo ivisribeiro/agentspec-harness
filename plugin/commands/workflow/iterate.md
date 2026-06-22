@@ -26,7 +26,7 @@ description: Update any phase document when requirements or design change (Cross
 
 ## Overview
 
-The `/iterate` command works with **document phases** of the AgentSpec workflow:
+The `/iterate` command works with **document phases** of the Spindle SDD workflow:
 
 ```text
 Phase 0: /brainstorm → BRAINSTORM_{FEATURE}.md ← /iterate can update

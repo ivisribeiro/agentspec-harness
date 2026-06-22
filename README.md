@@ -1,6 +1,6 @@
 # spindle
 
-**AgentSpec made harness-native** — a Claude Code plugin that turns the AgentSpec SDD cycle (Brainstorm → Define → Design → Build → Ship) into a deterministic, gate-backed workflow where `spin` is the spine and Claude is the worker.
+**A deterministic harness for spec-driven development in Claude Code** — it turns the SDD cycle (Brainstorm → Define → Design → Build → Ship) into a gate-backed workflow where `spin` is the spine and Claude is the worker.
 
 > **The idea in one line:** separate the thing that *decides* from the thing that *generates*. Claude writes; a deterministic TypeScript CLI named `spin` decides what "done" means — and `spin` **never calls a model** (a CI grep-guard fails the build if `src/` so much as references `fetch(`). "Done" becomes a checkable verdict over files, evidence, and acceptance-criterion identity — returned as an exit code — not a self-marked checkbox.
 
