@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
+import { RunStateError } from '../core/run/run-state.js';
 import {
   initHandler,
   stateHandler,
@@ -251,7 +252,7 @@ export async function runCli(
     .description('detect doc-vs-code drift in an audit handoff (exit 1 if inconsistent/drift items exist)')
     .requiredOption('--audit <file>', 'audit handoff JSON to reconcile')
     .action(function (this: Command, opts) {
-      emit(reconcileHandler(opts));
+      emit(reconcileHandler(root(this), opts));
     });
 
   program
@@ -280,6 +281,9 @@ export async function runCli(
     await program.parseAsync(argv);
   } catch (err) {
     process.stderr.write((err as Error).message + '\n');
+    // A corrupt/invalid ledger on disk is an INTERNAL failure (exit 3), not a usage
+    // error. A missing ledger and ordinary bad-invocation errors stay usage (exit 2).
+    if (err instanceof RunStateError && (err.kind === 'corrupt' || err.kind === 'invalid')) return 3;
     return 2;
   }
   return exitCode;

@@ -75,4 +75,68 @@ describe('CLI handler exit-code ABI', () => {
     });
     expect((await R('reconcile', '--audit', clean)).code).toBe(0); // silently_fixed → clean
   });
+
+  it('spin reconcile resolves a relative --audit against --root (not cwd)', async () => {
+    write(
+      root,
+      'audit-rel.json',
+      JSON.stringify({ domain: 'd', built: [{ item: 'x', status: 'proven', verified_in_code: true, resolved_at_commit: 'a', evidence: {} }] })
+    );
+    // a relative path must resolve under --root; before the fix it resolved under cwd → not found → exit 2
+    expect((await R('reconcile', '--audit', 'audit-rel.json')).code).toBe(0);
+  });
+
+  it('spin next is ledger-authoritative + gate-aware (a stray .md does not unlock downstream)', async () => {
+    await R('init', '--schema', 'sdd', '--feature', 'n');
+    // write DEFINE.md WITHOUT spin complete — file existence alone must not unlock design
+    write(root, '.spindle/features/n/DEFINE.md', '## Why\nx\n## What\ny\n## Acceptance Criteria\n- AC-1 a\n');
+    let r = await R('next');
+    expect(r.json.ready.map((x: any) => x.id)).not.toContain('design');
+    expect(r.json.detected_on_disk).toContain('define'); // surfaced separately, not as readiness
+
+    // complete define in the ledger, but do NOT run G_DEFINE → design is gate_blocked, not ready
+    const dh = writeJson(root, 'work/define.json', { feature: 'n', clarity: 0.9, criteria: ['AC-1'] });
+    await R('complete', 'define', '--handoff', dh);
+    r = await R('next');
+    expect(r.json.gate_blocked.design).toEqual(['G_DEFINE']);
+    expect(r.json.ready.map((x: any) => x.id)).not.toContain('design');
+
+    // run G_DEFINE green → design becomes ready
+    await R('gate', 'G_DEFINE');
+    r = await R('next');
+    expect(r.json.ready.map((x: any) => x.id)).toContain('design');
+  });
+
+  it('a corrupt run.json is an internal error (exit 3), not a usage error', async () => {
+    await R('init', '--schema', 'sdd', '--feature', 'c');
+    write(root, '.spindle/run.json', '{ broken json');
+    expect((await R('state')).code).toBe(3);
+  });
+
+  it('spin schema validate rejects unknown handoff/gate references', async () => {
+    await R('init', '--schema', 'sdd', '--feature', 's');
+    write(
+      root,
+      '.spindle/schema.yaml',
+      'name: t\nversion: 1\nartifacts:\n  - id: a\n    generates: A.md\n    handoff: bogus-handoff\n    requires: []\ngates:\n  before_a: G_NOPE\n'
+    );
+    const r = await R('schema', 'validate');
+    expect(r.code).toBe(1);
+    const s = JSON.stringify(r.json);
+    expect(s).toContain('bogus-handoff');
+    expect(s).toContain('G_NOPE');
+  });
+
+  it('spin init rejects an unsafe feature slug (exit 2)', async () => {
+    expect((await R('init', '--schema', 'sdd', '--feature', '../../escape')).code).toBe(2);
+  });
+
+  it('spin merge-findings fails closed on an invalid finding before merging', async () => {
+    const badSev = writeJson(root, 'bad.json', { findings: [{ file: 'x.ts', line: 1, severity: 'apocalyptic', rule: 'r', message: 'm', source: 's' }] });
+    expect((await R('merge-findings', badSev)).code).toBe(2); // unknown severity
+    const noSrc = writeJson(root, 'nosrc.json', { findings: [{ file: 'x.ts', line: 1, severity: 'high', rule: 'r', message: 'm' }] });
+    expect((await R('merge-findings', noSrc)).code).toBe(2); // missing source
+    const good = writeJson(root, 'good.json', { findings: [{ file: 'x.ts', line: 1, severity: 'high', rule: 'r', message: 'm', source: 'claude' }] });
+    expect((await R('merge-findings', good)).code).toBe(0);
+  });
 });

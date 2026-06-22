@@ -31,10 +31,16 @@ export function schemaCopyPath(root: string): string {
   return path.join(root, RUN_DIR, SCHEMA_FILE);
 }
 
+export type RunStateErrorKind = 'missing' | 'corrupt' | 'invalid';
+
 export class RunStateError extends Error {
-  constructor(message: string) {
+  readonly kind: RunStateErrorKind;
+  constructor(message: string, kind: RunStateErrorKind = 'corrupt') {
     super(message);
     this.name = 'RunStateError';
+    // missing = user hasn't run `spin init` (a usage error, exit 2);
+    // corrupt/invalid = the ledger on disk is broken (an internal failure, exit 3).
+    this.kind = kind;
   }
 }
 
@@ -58,18 +64,18 @@ export function runStateExists(root: string): boolean {
 export function loadRunState(root: string): RunState {
   const file = runFilePath(root);
   if (!fs.existsSync(file)) {
-    throw new RunStateError(`No run state at ${file}. Run "spin init" first.`);
+    throw new RunStateError(`No run state at ${file}. Run "spin init" first.`, 'missing');
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
   } catch {
-    throw new RunStateError(`Corrupt run state JSON at ${file}.`);
+    throw new RunStateError(`Corrupt run state JSON at ${file}.`, 'corrupt');
   }
   const result = RunStateSchema.safeParse(parsed);
   if (!result.success) {
     const errors = result.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ');
-    throw new RunStateError(`Invalid run state: ${errors}`);
+    throw new RunStateError(`Invalid run state: ${errors}`, 'invalid');
   }
   return result.data;
 }

@@ -1,10 +1,10 @@
-# CLAUDE.md — spindle contributor doctrine
+# AGENTS.md — spindle contributor doctrine
 
 This file governs anyone (human or model) who edits this repo. Read it before
 touching code. If a chat instruction conflicts with the invariant below, **stop
 and ask** — do not adapt silently.
 
-`spindle` is a Claude Code plugin. It has two layers and exactly one
+`spindle` is a Codex plugin. It has two layers and exactly one
 seam between them. Keeping that seam clean is the whole job.
 
 ---
@@ -29,7 +29,7 @@ think you need a model inside `spin`, you have mislocated the work: it belongs i
 a command or a worker, on the model side of the seam.
 
 Corollary anti-patterns — never do these:
-- Telling Claude to "run the agents from node" or call an inference endpoint
+- Telling Codex to "run the agents from node" or call an inference endpoint
   directly. Dispatch is the Task tool, from a command. That is the only
   dispatch path.
 - Marking an artifact complete by hand, or having a worker advance a phase.
@@ -117,7 +117,7 @@ between `src/`+`schemas/` and `plugin/`.
 | Command | Returns / effect |
 |---|---|
 | `spin init --schema <sdd\|kb> --feature <slug>` | scaffold `.spindle/`, copy the editable schema, create `run.json` |
-| `spin next` | `{ ready:[{id,model,parallel_group}], blocked:{}, gate_blocked:{}, detected_on_disk:[], complete:bool }` — ledger-authoritative + gate-aware (file existence alone never makes an artifact `ready`) |
+| `spin next` | `{ ready:[{id,model,parallel_group}], blocked:{}, complete:bool }` |
 | `spin order` | full Kahn build order |
 | `spin trace` | the run-ledger timeline (`events[]`) + a tier/token summary. Pure read, exit 0 — a report, not a gate |
 | `spin eval [--corpus d] [--strict]` | replay the eval corpus through the REAL gates; exit 1 on a verdict regression (`--strict` also requires every gate to have a pass+block case) |

@@ -97,7 +97,7 @@ Copy `dist/` into your project and invoke `node dist/cli/index.js` directly. Pin
 | Command | What it does | Exit codes |
 |---|---|---|
 | `spin init --schema <sdd\|kb> --feature <slug>` | Scaffold `.spindle/`, copy editable schema to `.spindle/schema.yaml`, create `run.json` | 0 / 2 |
-| `spin next` | Returns `{ ready:[{id,model,parallel_group}], blocked:{}, complete:bool }` — the ready artifact queue | 0 |
+| `spin next` | `{ ready:[{id,model,parallel_group}], blocked:{}, gate_blocked:{}, detected_on_disk:[], complete:bool }` — readiness is **ledger-authoritative + gate-aware**: an artifact is `gate_blocked` until the lifecycle gate before it is green; a stray `.md` only shows in `detected_on_disk`, never `ready` | 0 |
 | `spin order` | Full Kahn build order for the active schema | 0 |
 | `spin state` (alias `spin status`) | Print the `run.json` ledger (`completed[]`, `retries{}`, `gates{}`) | 0 |
 | `spin explain <gateId>` | What a gate reads, what blocks it, which flags apply — no source-diving | 0 / 2 |

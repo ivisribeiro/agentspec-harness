@@ -29,11 +29,14 @@ describe('spin CLI exit-code ABI', () => {
     expect(r.json.passed).toBe(false);
   });
 
-  it('an unknown gate exits 1 with guidance', async () => {
+  it('an unknown gate is a usage error (exit 2) and is NOT recorded in the ledger', async () => {
     await cli(['--root', root, 'init']);
     const r = await cli(['--root', root, 'gate', 'G_NOPE']);
-    expect(r.code).toBe(1);
-    expect(r.json.reasons[0]).toContain('unknown gate');
+    expect(r.code).toBe(2); // unknown gate = malformed invocation, not a domain block
+    expect(r.json.error).toContain('unknown gate');
+    // and it must not have mutated run.json.gates
+    const state = await cli(['--root', root, 'state']);
+    expect(state.json.gates.G_NOPE).toBeUndefined();
   });
 
   it('route prints tier+model and is deterministic', async () => {

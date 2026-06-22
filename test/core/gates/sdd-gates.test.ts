@@ -300,6 +300,28 @@ describe('G_BUILD (replaces the prose checkbox)', () => {
     }
   });
 
+  it('BLOCKS a manifest path that escapes the project root (containment)', () => {
+    buildAllFiles();
+    writeHandoff('design', { feature: 'feat', manifest: [{ file: '../escape.txt', action: 'create', purpose: 'x' }] });
+    const r = gBuild(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('unsafe-path:../escape.txt');
+  });
+
+  it('BLOCKS a verified_by path that escapes the project root (containment)', () => {
+    buildAllFiles();
+    writeHandoff('build', {
+      feature: 'feat',
+      results: [
+        { criterion: 'AC-1', status: 'passed', verified_by: '../../etc/passwd' },
+        { criterion: 'AC-2', status: 'passed' },
+      ],
+    });
+    const r = gBuild(ctx);
+    expect(r.passed).toBe(false);
+    expect(r.unmet).toContain('unsafe-path:AC-1');
+  });
+
   it('BLOCKS when reported test coverage is below its threshold (coverage floor)', () => {
     buildAllFiles();
     writeHandoff('build', {
