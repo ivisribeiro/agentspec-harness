@@ -1,0 +1,7 @@
+{
+  "id": "G_DESIGN-block",
+  "gate": "G_DESIGN",
+  "expect": "block",
+  "args": {},
+  "note": "DESIGN has no file-manifest table (manifest-table)"
+}

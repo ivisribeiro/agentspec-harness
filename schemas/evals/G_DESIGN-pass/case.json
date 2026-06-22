@@ -1,0 +1,7 @@
+{
+  "id": "G_DESIGN-pass",
+  "gate": "G_DESIGN",
+  "expect": "pass",
+  "args": {},
+  "note": "sections + manifest table + valid design handoff"
+}

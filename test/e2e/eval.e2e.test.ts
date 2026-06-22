@@ -19,10 +19,18 @@ describe('spin eval — the harness evaluating itself (Fase 2)', () => {
     }
   });
 
-  it('--strict is fail-closed while state-coupled gates are not yet in the corpus', async () => {
+  it('--strict passes: every registry gate has a pass AND a block fixture (C3)', async () => {
     const r = await cli(['eval', '--strict']);
-    expect(r.code).toBe(1);
-    expect(r.json.coverage.complete).toBe(false);
+    expect(r.code).toBe(0);
+    expect(r.json.failed).toBe(0);
+    expect(r.json.coverage.complete).toBe(true);
+    expect(r.json.coverage.uncovered).toEqual([]);
+    expect(r.json.coverage.missing_pass).toEqual([]);
+    expect(r.json.coverage.missing_block).toEqual([]);
+    // the 6 state-coupled gates are now in the corpus alongside the 5 arg-file gates
+    for (const g of ['G_DEFINE', 'G_DESIGN', 'G_BUILD', 'G_SHIP', 'G_KB_STRUCTURE', 'G_KB_COVERAGE']) {
+      expect(r.json.coverage.covered).toContain(g);
+    }
   });
 
   it('catches a verdict regression (a recorded pass that the real gate blocks)', async () => {

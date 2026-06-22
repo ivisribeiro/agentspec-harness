@@ -1,0 +1,12 @@
+{
+  "feature": "feat",
+  "manifest": [
+    {
+      "file": "missing.txt",
+      "action": "create",
+      "purpose": "implement"
+    }
+  ],
+  "decisions": [],
+  "technologies": []
+}

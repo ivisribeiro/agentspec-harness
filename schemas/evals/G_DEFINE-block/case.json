@@ -1,0 +1,7 @@
+{
+  "id": "G_DEFINE-block",
+  "gate": "G_DEFINE",
+  "expect": "block",
+  "args": {},
+  "note": "DEFINE.md is missing the Acceptance Criteria section (section:Acceptance Criteria)"
+}
