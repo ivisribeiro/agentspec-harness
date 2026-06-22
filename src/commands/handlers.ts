@@ -18,6 +18,7 @@ import {
   handoffDir,
   schemaCopyPath,
 } from '../core/run/run-state.js';
+import { Usage, type RunEvent } from '../core/run/run-state.schema.js';
 import { buildGateContext, runGate } from '../core/gates/gate-runner.js';
 import { checkHandoffFile, checkHandoffObject } from '../core/handoff/handoff-check.js';
 import { criteriaDiff } from '../core/validation/criteria-diff.js';
@@ -95,6 +96,57 @@ export function stateHandler(root: string): HandlerResult {
   return ok(loadRunState(root));
 }
 
+export function traceHandler(root: string): HandlerResult {
+  if (!runStateExists(root)) return usage('no run state — run "spin init" first');
+  const state = loadRunState(root);
+  const events = state.events;
+
+  const completes = events.filter(
+    (e): e is Extract<RunEvent, { kind: 'complete' }> => e.kind === 'complete'
+  );
+  const gates = events.filter((e): e is Extract<RunEvent, { kind: 'gate' }> => e.kind === 'gate');
+  const retries = events.filter((e) => e.kind === 'retry');
+
+  // Pure aggregation over RECORDED events: counting completions/verdicts and summing
+  // model-reported token numbers. No tokenization, no pricing — the spine never
+  // measures inference, it only adds up numbers the model handed it.
+  const tierHistogram: Record<string, number> = {};
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let anyTokensReported = false;
+  for (const c of completes) {
+    const tier = c.usage?.tier ?? 'unreported';
+    tierHistogram[tier] = (tierHistogram[tier] ?? 0) + 1;
+    if (c.usage?.tokens_in != null) {
+      tokensIn += c.usage.tokens_in;
+      anyTokensReported = true;
+    }
+    if (c.usage?.tokens_out != null) {
+      tokensOut += c.usage.tokens_out;
+      anyTokensReported = true;
+    }
+  }
+
+  return ok({
+    feature: state.feature,
+    schema: state.schema,
+    events,
+    summary: {
+      completed: completes.length,
+      gates: {
+        total: gates.length,
+        passed: gates.filter((g) => g.passed).length,
+        blocked: gates.filter((g) => !g.passed).length,
+      },
+      retries: retries.length,
+      tier_histogram: tierHistogram,
+      // null (not zero) when no worker reported usage — absence is honest, since the
+      // CLI cannot derive these itself.
+      reported_tokens: anyTokensReported ? { tokens_in: tokensIn, tokens_out: tokensOut } : null,
+    },
+  });
+}
+
 export function nextHandler(root: string): HandlerResult {
   if (!runStateExists(root)) return usage('no run state — run "spin init" first');
   const graph = activeGraph(root);
@@ -148,7 +200,24 @@ export function completeHandler(
     fs.writeFileSync(dest, JSON.stringify(check.data, null, 2) + '\n');
   }
 
-  const state = markComplete(root, id);
+  // Opaque, model-reported usage rides on the sidecar's optional top-level `usage`
+  // key (the artifact schema strips unknown keys, so this never affects validation).
+  // The CLI only RECORDS it — it never computes or prices tokens. Usage is advisory:
+  // a malformed or absent annotation never blocks completion.
+  let reportedUsage: Usage | undefined;
+  if (opts.handoff && fs.existsSync(opts.handoff)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(opts.handoff, 'utf-8')) as { usage?: unknown };
+      if (raw.usage !== undefined) {
+        const parsed = Usage.safeParse(raw.usage);
+        if (parsed.success) reportedUsage = parsed.data;
+      }
+    } catch {
+      /* usage is advisory; never block completion on it */
+    }
+  }
+
+  const state = markComplete(root, id, reportedUsage);
   return ok({ completed: id, runState: state });
 }
 

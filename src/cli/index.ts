@@ -7,6 +7,7 @@ import {
   nextHandler,
   orderHandler,
   completeHandler,
+  traceHandler,
   validateHandler,
   gateHandler,
   diffCriteriaHandler,
@@ -43,7 +44,7 @@ export async function runCli(
   const program = new Command();
   program
     .name('spin')
-    .description('AgentSpec Harness — deterministic spec-driven orchestration spine')
+    .description('Spindle — deterministic spec-driven orchestration spine')
     .version('0.1.0')
     .option('--root <dir>', 'project root containing .spindle/ (default: cwd)')
     .enablePositionalOptions();
@@ -75,6 +76,13 @@ export async function runCli(
     .command('order')
     .action(function (this: Command) {
       emit(orderHandler(root(this)));
+    });
+
+  program
+    .command('trace')
+    .description('print the recorded run-ledger timeline + a tier/token summary (pure read, exit 0)')
+    .action(function (this: Command) {
+      emit(traceHandler(root(this)));
     });
 
   program
