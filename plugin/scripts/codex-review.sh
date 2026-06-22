@@ -51,8 +51,13 @@ EOF
 
 # codex exec is the non-interactive one-shot mode; it resolves its own auth (codex login
 # or OPENAI_API_KEY). Spindle hardcodes no endpoint and no credential.
+#   --skip-git-repo-check: codex refuses to run in a dir it hasn't marked "trusted"
+#     unless this is set; since this is a non-interactive (approval: never) call, we pass
+#     it so the first /codex-review in any project works without an interactive trust step.
+#   </dev/null: the prompt is passed as an arg, so close stdin — otherwise codex exec
+#     blocks "Reading additional input from stdin..." when run with no piped input.
 MODEL_ARG=""
 [ -n "${SPINDLE_CODEX_MODEL:-}" ] && MODEL_ARG="-m ${SPINDLE_CODEX_MODEL}"
-codex exec ${MODEL_ARG} ${SPINDLE_CODEX_FLAGS:-} "$PROMPT" 2>&1 \
+codex exec --skip-git-repo-check ${MODEL_ARG} ${SPINDLE_CODEX_FLAGS:-} "$PROMPT" </dev/null 2>&1 \
   || echo "CODEX_ERROR: codex exec failed — check that you ran 'codex login' or set OPENAI_API_KEY (see docs/codex-review.md)."
 exit 0
